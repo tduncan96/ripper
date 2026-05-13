@@ -32,6 +32,34 @@ func gatherStatus() (string, error) {
 	return string(data), nil
 }
 
+const pageTemplate = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rip Status</title>
+<style>
+body {
+  margin: 0;
+  padding: 1rem;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.4;
+}
+pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+</style>
+</head>
+<body>
+<pre>%s</pre>
+</body>
+</html>`
+
 func statusHandler (w http.ResponseWriter, r *http.Request) {
 	status, err := gatherStatus()
 	if err != nil {
@@ -41,7 +69,7 @@ func statusHandler (w http.ResponseWriter, r *http.Request) {
 	}
 
     w.Header().Set("Content-Type", "text/html; charset=utf-8")
-    fmt.Fprintf(w, "<html><body><pre>%s</pre></body></html>", html.EscapeString(status))
+    fmt.Fprintf(w, pageTemplate, html.EscapeString(status))
 }
 
 
