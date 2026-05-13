@@ -7,7 +7,7 @@ on:
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
-    container: golang:1.23-alpine
+    container: golang:1.26-alpine
     steps:
       - name: Install deps
         run: apk add --no-cache git openssh-client
