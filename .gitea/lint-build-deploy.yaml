@@ -1,0 +1,47 @@
+name: Build and Deploy rip-status
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    container: golang:1.23-alpine
+    steps:
+      - name: Install deps
+        run: apk add --no-cache git openssh-client
+
+      - name: Clone repo
+        run: git -c http.sslVerify=false clone http://192.168.0.99:3000/tduncan/rip-status.git .
+
+      - name: Code quality and security checks
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          go vet ./...
+          staticcheck ./...
+          gosec ./...
+          govulncheck ./...
+
+      - name: Build
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -ldflags="-s -w" -o rip-status .
+
+      - name: Deploy to saturn
+        env:
+          SATURN_SVC_SSH_KEY: ${{ secrets.SATURN_SVC_SSH_KEY }}
+        run: |
+          eval "$(ssh-agent -s)"
+          ssh-add - <<< "$SATURN_SVC_SSH_KEY"
+          scp -o StrictHostKeyChecking=no rip-status saturn-svc@192.168.0.99:/tmp/rip-status.new
+          ssh -o StrictHostKeyChecking=no saturn-svc@192.168.0.99 '
+            sudo mv /tmp/rip-status.new /usr/local/bin/rip-status &&
+            sudo chmod +x /usr/local/bin/rip-status &&
+            sudo systemctl restart rip-status &&
+            sleep 2 &&
+            systemctl is-active --quiet rip-status
+          '
