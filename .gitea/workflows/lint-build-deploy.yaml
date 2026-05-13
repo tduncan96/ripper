@@ -36,7 +36,7 @@ jobs:
           SATURN_SVC_SSH_KEY: ${{ secrets.SATURN_SVC_SSH_KEY }}
         run: |
           eval "$(ssh-agent -s)"
-          ssh-add - <<< "$SATURN_SVC_SSH_KEY"
+          printf '%s\n' "$SATURN_SVC_SSH_KEY" | ssh-add -
           scp -o StrictHostKeyChecking=no rip-status saturn-svc@192.168.0.99:/tmp/rip-status.new
           ssh -o StrictHostKeyChecking=no saturn-svc@192.168.0.99 '
             sudo mv /tmp/rip-status.new /usr/local/bin/rip-status &&
