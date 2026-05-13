@@ -1,25 +1,36 @@
 package main
 
 import (
-	"os"	
-	"log"
 	"fmt"
 	"html"
+	"io"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"time"
+
 	"github.com/joho/godotenv"
 )
 
-var statusTmpPath string
+var (
+	statusRoot *os.Root
+	statusFile string
+)
 
 func gatherStatus() (string, error) {
-	statusFrame, err := os.ReadFile(statusTmpPath)
+	file, err := statusRoot.Open(statusFile)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
 	if err != nil {
 		return "", err
 	}
 
-	statusString := string(statusFrame)
-
-	return statusString, nil
+	return string(data), nil
 }
 
 func statusHandler (w http.ResponseWriter, r *http.Request) {
@@ -40,12 +51,26 @@ func main () {
 	if err != nil{
 		log.Fatal(err)
 	}
-	var ok bool
-	statusTmpPath, ok = vars["STATUS_TMP"]
+	statusTmpPath, ok := vars["STATUS_TMP"]
 	if !ok {
 		log.Fatal("STATUS_TMP not set in config")
 	}
+
+	dir := filepath.Dir(statusTmpPath)
+	statusFile = filepath.Base(statusTmpPath)
+
+	statusRoot, err = os.OpenRoot(dir)
+	if err != nil {
+        log.Fatalf("opening status root %q: %v", dir, err)
+	}
+	defer statusRoot.Close()
 	
 	http.HandleFunc("GET /{$}", statusHandler)
-	log.Fatal(http.ListenAndServe(":9511", nil)) 
+	srv := &http.Server{
+		Addr: ":9511",
+		ReadTimeout: 5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout: 60 * time.Second,
+	}
+	log.Fatal(srv.ListenAndServe()) 
 }
