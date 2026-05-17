@@ -115,3 +115,17 @@ func StatusHandler (w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func (s *Status) RipPercent() int {
+	if s.TotalMB == 0 {
+		return 0
+	}
+	return s.CurrentRipMB * 100 / s.TotalMB
+}
+
+func (s *Status) MovePercent() int {
+	if s.TotalMB == 0 {
+		return 0
+	}
+	return s.CurrentMvMB * 100 / s.TotalMB
+}

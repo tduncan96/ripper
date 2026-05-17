@@ -3,7 +3,6 @@
     <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="refresh" content="3">
     <title>Rip Status</title>
         <style>
         body {
@@ -15,15 +14,81 @@
             font-size: 14px;
             line-height: 1.4;
         }
+        .bar {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            height: 22px;
+            background: #2d2d2d;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 4px 0 12px 0;
+        }
+        .bar-fill {
+            height: 100%;
+            background: #4ade80;
+            transition: width 0.5s ease;
+        }
+        .bar-fill.move {
+            background: #60a5fa;
+        }
+        .bar-text {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            text-shadow: 0 0 2px #000;
+            font-size: 12px;
+        }
         </style>
     </head>
     <body>
-        <h3>{{.Title}}</h3>
-        <p>Phase: <strong>{{.Phase}}</strong></p>
-        <p>Destination: {{.Destination}}</p>
-        <p>Rip progress: {{.CurrentRipMB}} / {{.TotalMB}} MB</p>
-        <p>Move progress: {{.CurrentMvMB}} / {{.TotalMB}} MB</p>
-        <p>Elapsed: {{.ElapsedSeconds}}s</p>
-        <p>Updated: {{.Updated}}</p>
+        <h3 id="title">{{.Title}}</h3>
+        <p>Phase: <strong id="phase">{{.Phase}}</strong></p>
+        <p>Destination: <span id="dest">{{.Destination}}</span></p>
+
+        <p>Rip progress:</p>
+        <div class="bar">
+            <div class="bar-fill rip" style="width: {{.RipPercent}}%"></div>
+            <span class="bar-text rip-text">{{.CurrentRipMB}} / {{.TotalMB}} MB ({{.RipPercent}}%)</span>
+        </div>
+
+        <p>Move progress:</p>
+        <div class="bar">
+            <div class="bar-fill move" style="width: {{.MovePercent}}%"></div>
+            <span class="bar-text move-text">{{.CurrentMvMB}} / {{.TotalMB}} MB ({{.MovePercent}}%)</span>
+        </div>
+
+        <p>Elapsed: <span id="elapsed">{{.ElapsedSeconds}}</span>s</p>
+        <p>Updated: <span id="updated">{{.Updated}}</span></p>
+
+        <script>
+        async function tick() {
+            try {
+                const s = await (await fetch('/json')).json();
+                const pct = (a, b) => b ? Math.floor(a * 100 / b) : 0;
+
+                document.getElementById('title').textContent = s.title;
+                document.getElementById('phase').textContent = s.phase;
+                document.getElementById('dest').textContent = s.destination;
+                document.getElementById('elapsed').textContent = s.elapsed_seconds;
+                document.getElementById('updated').textContent = s.updated;
+
+                const ripPct = pct(s.cur_rip_mb, s.total_mb);
+                document.querySelector('.bar-fill.rip').style.width = ripPct + '%';
+                document.querySelector('.rip-text').textContent =
+                    `${s.cur_rip_mb} / ${s.total_mb} MB (${ripPct}%)`;
+
+                const mvPct = pct(s.cur_mv_mb, s.total_mb);
+                document.querySelector('.bar-fill.move').style.width = mvPct + '%';
+                document.querySelector('.move-text').textContent =
+                    `${s.cur_mv_mb} / ${s.total_mb} MB (${mvPct}%)`;
+            } catch (e) { /* ignore, try again */ }
+        }
+        setInterval(tick, 1000);
+        </script>
     </body>
 </html>
