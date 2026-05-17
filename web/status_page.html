@@ -54,17 +54,17 @@
             Elapsed: <span id="elapsed">{{.ElapsedSeconds}}</span>
         </p>
 
-        <p>Rip progress:</p>
+        <p>Rip progress:<br>
         <div class="bar">
             <div class="bar-fill rip" style="width: {{.RipPercent}}%"></div>
             <span class="bar-text rip-text">{{.CurrentRipMB}} / {{.TotalMB}} MB ({{.RipPercent}}%)</span>
-        </div>
+        </div></p>
 
-        <p>Move progress:</p>
+        <p>Move progress:<br>
         <div class="bar">
             <div class="bar-fill move" style="width: {{.MovePercent}}%"></div>
             <span class="bar-text move-text">{{.CurrentMvMB}} / {{.TotalMB}} MB ({{.MovePercent}}%)</span>
-        </div>
+        </div></p>
 
 
         <script>
