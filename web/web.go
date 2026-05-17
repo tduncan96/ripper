@@ -92,7 +92,7 @@ func JsonHandler (w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, string(json))
 }
 
-var statusTmpl = template.Must(template.ParseFiles("status_page.html"))
+var statusTmpl = template.Must(template.ParseFiles("web/status_page.html"))
 
 func StatusHandler (w http.ResponseWriter, r *http.Request) {
 	status, err := getStatus()
