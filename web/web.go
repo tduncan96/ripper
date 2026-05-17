@@ -13,13 +13,29 @@ import (
 	"github.com/joho/godotenv"
 )
 
+type Status struct {
+	Start string `json:"start"`
+	StartEpoch int `json:"start_epoch"`
+	RunPID int `json:"run_pid"`
+	MKVPID int `json:"mkv_pid"`
+	Phase string `json:"phase"`
+	Title string `json:"title"`
+	Destination string `json:"destination"`
+	CurrentRipMB int `json:"cur_rip_mb"`
+	CurrentMvMB int `json:"cur_mv_mb"`
+	TotalMB int `json:"total_mb"`
+	ElapsedSeconds int `json:"elapsed_seconds"`
+	Updated string `json:"updated"`
+	UpdatedEpoch float64 `json:"updated_epoch"`
+}
+
 var (
 	statusRoot *os.Root
 	statusFile string
 )
 
-func openStatusFile() {
-		vars, err := godotenv.Read("/home/saturn-svc/.config/ripper/env.sh")
+func OpenStatusFile() {
+	vars, err := godotenv.Read("/home/saturn-svc/.config/ripper/env.sh")
 	if err != nil{
 		log.Fatal(err)
 	}
@@ -36,22 +52,6 @@ func openStatusFile() {
         log.Fatalf("opening status root %q: %v", dir, err)
 	}
 	defer statusRoot.Close()
-}
-
-type Status struct {
-	Start string `json:"start"`
-	StartEpoch int `json:"start_epoch"`
-	RunPID int `json:"run_pid"`
-	MKVPID int `json:"mkv_pid"`
-	Phase string `json:"phase"`
-	Title string `json:"title"`
-	Destination string `json:"destination"`
-	CurrentRipMB int `json:"cur_rip_mb"`
-	CurrentMvMB int `json:"cur_mv_mb"`
-	TotalMB int `json:"total_mb"`
-	ElapsedSeconds int `json:"elapsed_seconds"`
-	Updated string `json:"updated"`
-	UpdatedEpoch float64 `json:"updated_epoch"`
 }
 
 func getStatus() (*Status, error) {

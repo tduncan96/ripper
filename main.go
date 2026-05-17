@@ -8,7 +8,10 @@ import (
 	"rip-status/web"
 )
 
+
 func main() {
+	web.OpenStatusFile()
+	
 	http.HandleFunc("GET /{$}", web.StatusHandler)
 	http.HandleFunc("GET /json", web.JsonHandler)
 
@@ -18,5 +21,6 @@ func main() {
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout: 60 * time.Second,
 	}
+	
 	log.Fatal(srv.ListenAndServe()) 
 }
