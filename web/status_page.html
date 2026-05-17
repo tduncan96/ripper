@@ -47,8 +47,12 @@
     </head>
     <body>
         <h3 id="title">{{.Title}}</h3>
-        <p>Phase: <strong id="phase">{{.Phase}}</strong></p>
-        <p>Destination: <span id="dest">{{.Destination}}</span></p>
+        <p>
+            <span id="updated">{{.Updated}}</span>
+            Phase: <strong id="phase">{{.Phase}}</strong>
+            Destination: <span id="dest">{{.Destination}}</span>
+            Elapsed: <span id="elapsed">{{.ElapsedSeconds}}</span>
+        </p>
 
         <p>Rip progress:</p>
         <div class="bar">
@@ -62,10 +66,24 @@
             <span class="bar-text move-text">{{.CurrentMvMB}} / {{.TotalMB}} MB ({{.MovePercent}}%)</span>
         </div>
 
-        <p>Elapsed: <span id="elapsed">{{.ElapsedSeconds}}</span>s</p>
-        <p>Updated: <span id="updated">{{.Updated}}</span></p>
 
         <script>
+        function fmtElapsed(s) {
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+        }
+
+        function fmtDate(iso) {
+            const d = new Date(iso);
+            return d.toLocaleString('en-US', {
+                month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false,
+            });
+        }
+
         async function tick() {
             try {
                 const s = await (await fetch('/json')).json();
@@ -74,8 +92,8 @@
                 document.getElementById('title').textContent = s.title;
                 document.getElementById('phase').textContent = s.phase;
                 document.getElementById('dest').textContent = s.destination;
-                document.getElementById('elapsed').textContent = s.elapsed_seconds;
-                document.getElementById('updated').textContent = s.updated;
+                document.getElementById('elapsed').textContent = fmtElapsed(s.elapsed_seconds);
+                document.getElementById('updated').textContent = fmtDate(s.updated);
 
                 const ripPct = pct(s.cur_rip_mb, s.total_mb);
                 document.querySelector('.bar-fill.rip').style.width = ripPct + '%';
