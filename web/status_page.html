@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="3">
+    <title>Rip Status</title>
+        <style>
+        body {
+            margin: 0;
+            padding: 1rem;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        </style>
+    </head>
+    <body>
+        <h3>{{.Title}}</h3>
+        <p>Phase: <strong>{{.Phase}}</strong></p>
+        <p>Destination: {{.Destination}}</p>
+        <p>Rip progress: {{.CurRipMB}} / {{.TotalRipMB}} MB</p>
+        <p>Move progress: {{.CurMvMB}} / {{.TotalMvMB}} MB</p>
+        <p>Elapsed: {{.ElapsedSeconds}}s</p>
+        <p>Updated: {{.Updated}}</p>
+    </body>
+</html>
