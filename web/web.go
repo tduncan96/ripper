@@ -96,7 +96,7 @@ func JsonHandler (w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//go:ember status_page.html
+//go:embed status_page.html
 var templateFS embed.FS
 var statusTmpl = template.Must(template.ParseFS(templateFS, "status_page.html"))
 
