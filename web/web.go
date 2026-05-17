@@ -1,7 +1,6 @@
 package web
 
 import (
-	"fmt"
 	"html/template"
 	"io"
 	"log"
@@ -9,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"encoding/json"
+	"embed"
 
 	"github.com/joho/godotenv"
 )
@@ -51,7 +51,6 @@ func OpenStatusFile() {
 	if err != nil {
         log.Fatalf("opening status root %q: %v", dir, err)
 	}
-	defer statusRoot.Close()
 }
 
 func getStatus() (*Status, error) {
@@ -82,17 +81,20 @@ func JsonHandler (w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json, err := json.Marshal(status)
+	data, err := json.Marshal(status)
 	if err != nil {
 		log.Printf("json serialization failed: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	fmt.Fprint(w, string(json))
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
 }
 
-var statusTmpl = template.Must(template.ParseFiles("web/status_page.html"))
+//go:ember status_page.html
+var templateFS embed.FS
+var statusTmpl = template.Must(template.ParseFS(templateFS, "status_page.html"))
 
 func StatusHandler (w http.ResponseWriter, r *http.Request) {
 	status, err := getStatus()
