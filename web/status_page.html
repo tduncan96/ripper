@@ -22,16 +22,29 @@
             background: #2d2d2d;
             border: 1px solid #3c3c3c;
             border-radius: 4px;
-            overflow: hidden;
             margin: 4px 0 12px 0;
         }
         .bar-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
             height: 100%;
             background: #4ade80;
             transition: width 0.5s ease;
+            border-radius: 3px 0 0 3px;
         }
         .bar-fill.move {
             background: #60a5fa;
+        }
+        .bar-overflow {
+            position: absolute;
+            top: 0;
+            left: 100%;
+            height: 100%;
+            background: #f87171;
+            transition: width 0.5s ease;
+            border-radius: 0 3px 3px 0;
+            width: 0;
         }
         .bar-text {
             position: absolute;
@@ -42,6 +55,7 @@
             color: #fff;
             text-shadow: 0 0 2px #000;
             font-size: 12px;
+            z-index: 1;
         }
         </style>
     </head>
@@ -54,13 +68,15 @@
 
         <p>Rip progress:<br>
         <div class="bar">
-            <div class="bar-fill rip" style="width: {{.RipPercent}}%"></div>
+            <div class="bar-fill rip"></div>
+            <div class="bar-overflow rip-overflow"></div>
             <span class="bar-text rip-text">{{.CurrentRipMB}} MB / {{.TotalMB}} MB ({{.RipPercent}}%)</span>
-        </div></p>
+        </div>
 
-        <p>Move progress:<br>
+        Move progress:<br>
         <div class="bar">
-            <div class="bar-fill move" style="width: {{.MovePercent}}%"></div>
+            <div class="bar-fill move"></div>
+            <div class="bar-overflow move-overflow"></div>
             <span class="bar-text move-text">{{.CurrentMvMB}} MB / {{.TotalMB}} MB ({{.MovePercent}}%)</span>
         </div></p>
 
@@ -82,10 +98,20 @@
             });
         }
 
+        function setBar(prefix, cur, total) {
+            const pct = total ? (cur * 100 / total) : 0;
+            const fill = document.querySelector(`.bar-fill.${prefix}`);
+            const overflow = document.querySelector(`.bar-overflow.${prefix}-overflow`);
+            const text = document.querySelector(`.${prefix}-text`);
+
+            fill.style.width = Math.min(100, pct) + '%';
+            overflow.style.width = Math.max(0, pct - 100) + '%';
+            text.textContent = `${cur} MB / ${total} MB (${Math.floor(pct)}%)`;
+        }
+
         async function tick() {
             try {
                 const s = await (await fetch('/json')).json();
-                const pct = (a, b) => b ? Math.floor(a * 100 / b) : 0;
 
                 document.getElementById('title').textContent = s.title;
                 document.getElementById('phase').textContent = s.phase;
@@ -93,15 +119,8 @@
                 document.getElementById('elapsed').textContent = fmtElapsed(s.elapsed_seconds);
                 document.getElementById('updated').textContent = fmtDate(s.updated);
 
-                const ripPct = pct(s.cur_rip_mb, s.total_mb);
-                document.querySelector('.bar-fill.rip').style.width = ripPct + '%';
-                document.querySelector('.rip-text').textContent =
-                    `${s.cur_rip_mb} / ${s.total_mb} MB (${ripPct}%)`;
-
-                const mvPct = pct(s.cur_mv_mb, s.total_mb);
-                document.querySelector('.bar-fill.move').style.width = mvPct + '%';
-                document.querySelector('.move-text').textContent =
-                    `${s.cur_mv_mb} / ${s.total_mb} MB (${mvPct}%)`;
+                setBar('rip', s.cur_rip_mb, s.total_mb);
+                setBar('move', s.cur_mv_mb, s.total_mb);
             } catch (e) { /* ignore, try again */ }
         }
         setInterval(tick, 1000);
