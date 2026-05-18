@@ -59,27 +59,26 @@
         }
         .subtitle {
             display: block;
-            font-size: 0.5em;
+            font-size: 0.65em;
             font-weight: normal;
             color: #666;
         }
         </style>
     </head>
     <body>
-        <h3 id="title">{{.Title}} <span class="subtitle" id="raw_title"><i>{{.RawTitle}}</i></span></h3>
-        <span id="updated">{{.Updated}}</span><br>
+        <h3 id="title"><span id="title-main">{{.Title}}</span> <span class="subtitle" id="raw_title"><i>{{.RawTitle}}</i></span></h3>        <span id="updated">{{.Updated}}</span><br>
         Phase: <strong id="phase"><i>{{.Phase}}</i></strong><br>
-        Destination: <span id="dest">{{.Destination}}</span><br>
-        Elapsed: <span id="elapsed">{{.ElapsedSeconds}}</span>
+        Destination: <span id="dest"><i>{{.Destination}}</i></span><br>
+        Elapsed: <span id="elapsed"><i>{{.ElapsedSeconds}}</i></span>
 
-        <p>Rip progress:<br>
+        <p>Rip progress:
         <div class="bar">
             <div class="bar-fill rip"></div>
             <div class="bar-overflow rip-overflow"></div>
             <span class="bar-text rip-text">{{.CurrentRipMB}} MB / {{.TotalMB}} MB ({{.RipPercent}}%)</span>
         </div>
 
-        Move progress:<br>
+        Move progress:
         <div class="bar">
             <div class="bar-fill move"></div>
             <div class="bar-overflow move-overflow"></div>
@@ -119,7 +118,8 @@
             try {
                 const s = await (await fetch('/json')).json();
 
-                document.getElementById('title').textContent = s.title;
+                document.getElementById('title-main').textContent = s.title;
+                document.getElementById('raw_title').textContent = s.raw_title;
                 document.getElementById('phase').textContent = s.phase;
                 document.getElementById('dest').textContent = s.destination;
                 document.getElementById('elapsed').textContent = fmtElapsed(s.elapsed_seconds);
