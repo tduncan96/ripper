@@ -19,6 +19,7 @@ type Status struct {
 	RunPID int `json:"run_pid"`
 	MKVPID int `json:"mkv_pid"`
 	Phase string `json:"phase"`
+	RawTitle string `json:"raw_title"`
 	Title string `json:"title"`
 	Destination string `json:"destination"`
 	CurrentRipMB int `json:"cur_rip_mb"`
