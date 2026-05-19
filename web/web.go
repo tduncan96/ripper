@@ -24,7 +24,8 @@ type Status struct {
 	Destination string `json:"destination"`
 	CurrentRipMB int `json:"cur_rip_mb"`
 	CurrentMvMB int `json:"cur_mv_mb"`
-	TotalMB int `json:"total_mb"`
+	TotalRipMB int `json:"total_rip_mb"`
+	TotalMvMB int `json:"total_mv_mb"`
 	ElapsedSeconds int `json:"elapsed_seconds"`
 	Updated string `json:"updated"`
 	UpdatedEpoch float64 `json:"updated_epoch"`
@@ -118,15 +119,15 @@ func StatusHandler (w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Status) RipPercent() int {
-	if s.TotalMB == 0 {
+	if s.TotalRipMB == 0 {
 		return 0
 	}
-	return s.CurrentRipMB * 100 / s.TotalMB
+	return s.CurrentRipMB * 100 / s.TotalRipMB
 }
 
 func (s *Status) MovePercent() int {
-	if s.TotalMB == 0 {
+	if s.TotalMvMB == 0 {
 		return 0
 	}
-	return s.CurrentMvMB * 100 / s.TotalMB
+	return s.CurrentMvMB * 100 / s.TotalMvMB
 }
