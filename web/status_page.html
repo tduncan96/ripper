@@ -136,8 +136,8 @@
                 document.getElementById('run_pid').textContent = s.run_pid
                 document.getElementById('mkv_pid').textContent = s.mkv_pid
 
-                setBar('rip', s.cur_rip_mb, s.total_mb);
-                setBar('move', s.cur_mv_mb, s.total_mb);
+                setBar('rip', s.cur_rip_mb, s.total_rip_mb);
+                setBar('move', s.cur_mv_mb, s.total_mv_mb);
             } catch (e) { /* ignore, try again */ }
         }
         setInterval(tick, 1000);
