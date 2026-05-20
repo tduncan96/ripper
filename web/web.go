@@ -21,7 +21,8 @@ type Status struct {
 	Phase string `json:"phase"`
 	RawTitle string `json:"raw_title"`
 	Title string `json:"title"`
-	Destination string `json:"destination"`
+	Dest string `json:"dest"`
+	FullDest string `json:"full_dest"`
 	CurrentRipMB int `json:"cur_rip_mb"`
 	CurrentMvMB int `json:"cur_mv_mb"`
 	TotalRipMB int `json:"total_rip_mb"`
