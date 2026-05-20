@@ -59,7 +59,7 @@
         }
         .subtitle {
             display: block;
-            font-size: 0.65em;
+            font-size: 0.7em;
             font-weight: normal;
             font-style: italic;
             color: #666;
@@ -78,7 +78,8 @@
         Phase: <strong class="status" id="phase">{{.Phase}}</strong><br>
         Destination: <span class="status" id="dest">{{.Destination}}</span><br>
         Elapsed: <span class="status" id="elapsed">{{.ElapsedSeconds}}</span><br>
-        PID: <span id="run_pid">{{.RunPID}}</span> / <span class="status" id="mkv_pid">{{.MKVPID}}</span>
+        PID: <span id="run_pid">{{.RunPID}}</span>
+        <span style="text-indent: 45px" class="subtitle" id="mkv_pid">{{.MKVPID}}</span>
 
         <p>Rip progress:
         <div class="bar">
