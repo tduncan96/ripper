@@ -80,7 +80,7 @@
         PID: <span id="run_pid">{{.RunPID}}</span>
         <span style="text-indent: 45px" class="subtitle" id="mkv_pid">({{.MKVPID}})</span>
 
-        <p>Rip progress:
+        <div><br>Rip progress:
         <div class="bar">
             <div class="bar-fill rip"></div>
             <div class="bar-overflow rip-overflow"></div>
@@ -92,7 +92,7 @@
             <div class="bar-fill move"></div>
             <div class="bar-overflow move-overflow"></div>
             <span class="bar-text move-text">{{.CurrentMvMB}} MB / {{.TotalMvMB}} MB ({{.MovePercent}}%)</span>
-        </div></p>
+        </div></div>
 
 
         <script>
@@ -139,7 +139,7 @@
 
                 setBar('rip', s.cur_rip_mb, s.total_rip_mb);
                 setBar('move', s.cur_mv_mb, s.total_mv_mb);
-            } catch (e) { /* ignore, try again */ }
+            } catch (e) { console.error('tick failed:', e); }
         }
         setInterval(tick, 1000);
         </script>
