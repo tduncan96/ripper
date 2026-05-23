@@ -80,19 +80,21 @@
         PID: <span id="run_pid">{{.RunPID}}</span>
         <span style="text-indent: 45px" class="subtitle" id="mkv_pid">({{.MKVPID}})</span>
 
-        <div><br>Rip progress:
-        <div class="bar">
-            <div class="bar-fill rip"></div>
-            <div class="bar-overflow rip-overflow"></div>
-            <span class="bar-text rip-text">{{.CurrentRipMB}} MB / {{.TotalRipMB}} MB ({{.RipPercent}}%)</span>
-        </div>
+        <div>
+            <br>Rip progress:
+            <div class="bar">
+                <div class="bar-fill rip"></div>
+                <div class="bar-overflow rip-overflow"></div>
+                <span class="bar-text rip-text">{{.CurrentRipMB}} MB / {{.TotalRipMB}} MB ({{.RipPercent}}%)</span>
+            </div>
 
-        Move progress:
-        <div class="bar">
-            <div class="bar-fill move"></div>
-            <div class="bar-overflow move-overflow"></div>
-            <span class="bar-text move-text">{{.CurrentMvMB}} MB / {{.TotalMvMB}} MB ({{.MovePercent}}%)</span>
-        </div></div>
+            Move progress:
+            <div class="bar">
+                <div class="bar-fill move"></div>
+                <div class="bar-overflow move-overflow"></div>
+                <span class="bar-text move-text">{{.CurrentMvMB}} MB / {{.TotalMvMB}} MB ({{.MovePercent}}%)</span>
+            </div>
+        </div>
 
 
         <script>
@@ -131,7 +133,6 @@
                 document.getElementById('raw_title').textContent = s.raw_title;
                 document.getElementById('phase').textContent = s.phase;
                 document.getElementById('dest').textContent = s.dest;
-                document.getElementById('full_dest').textContent = s.full_dest;
                 document.getElementById('elapsed').textContent = fmtElapsed(s.elapsed_seconds);
                 document.getElementById('updated').textContent = fmtDate(s.updated);
                 document.getElementById('run_pid').textContent = s.run_pid
