@@ -1,45 +1,51 @@
 package web
 
 import (
+	"embed"
+	"encoding/json"
+	"fmt"
 	"html/template"
-	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
-	"encoding/json"
-	"embed"
+	"sort"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
 
 type Status struct {
-	Start string `json:"start"`
-	StartEpoch int `json:"start_epoch"`
-	RunPID int `json:"run_pid"`
-	MKVPID int `json:"mkv_pid"`
-	Phase string `json:"phase"`
-	RawTitle string `json:"raw_title"`
-	Title string `json:"title"`
-	Dest string `json:"dest"`
-	FullDest string `json:"full_dest"`
-	CurrentRipMB int `json:"cur_rip_mb"`
-	CurrentMvMB int `json:"cur_mv_mb"`
-	TotalRipMB int `json:"total_rip_mb"`
-	TotalMvMB int `json:"total_mv_mb"`
-	ElapsedSeconds int `json:"elapsed_seconds"`
-	Updated string `json:"updated"`
-	UpdatedEpoch float64 `json:"updated_epoch"`
+	Start          string  `json:"start"`
+	StartEpoch     int     `json:"start_epoch"`
+	RunPID         int     `json:"run_pid"`
+	MKVPID         int     `json:"mkv_pid"`
+	Phase          string  `json:"phase"`
+	RawTitle       string  `json:"raw_title"`
+	Title          string  `json:"title"`
+	Dest           string  `json:"dest"`
+	FullDest       string  `json:"full_dest"`
+	CurrentRipMB   int     `json:"cur_rip_mb"`
+	CurrentMvMB    int     `json:"cur_mv_mb"`
+	TotalRipMB     int     `json:"total_rip_mb"`
+	TotalMvMB      int     `json:"total_mv_mb"`
+	ElapsedSeconds int     `json:"elapsed_seconds"`
+	Updated        string  `json:"updated"`
+	UpdatedEpoch   float64 `json:"updated_epoch"`
+	Drive          string  `json:"drive"`
+	Device         string  `json:"device"`
 }
 
 var (
 	statusRoot *os.Root
 	statusFile string
+	statusGlob string
 )
 
 func OpenStatusFile() {
 	vars, err := godotenv.Read("/home/saturn-svc/.config/ripper/env.sh")
-	if err != nil{
+	if err != nil {
 		log.Fatal(err)
 	}
 	statusTmpPath, ok := vars["STATUS_TMP"]
@@ -49,42 +55,55 @@ func OpenStatusFile() {
 
 	dir := filepath.Dir(statusTmpPath)
 	statusFile = filepath.Base(statusTmpPath)
+	statusGlob = perDriveGlob(statusFile)
 
 	statusRoot, err = os.OpenRoot(dir)
 	if err != nil {
-        log.Fatalf("opening status root %q: %v", dir, err)
+		log.Fatalf("opening status root %q: %v", dir, err)
 	}
 }
 
-func getStatus() (*Status, error) {
-	file, err := statusRoot.Open(statusFile)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	data, err := io.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
-
-	var s Status
-	if err := json.Unmarshal(data, &s); err != nil {
-		return nil, err
-	}
-
-	return &s, nil
+func perDriveGlob(base string) string {
+	ext := filepath.Ext(base)
+	stem := strings.TrimSuffix(base, ext)
+	return stem + ".*" + ext
 }
 
-func JsonHandler (w http.ResponseWriter, r *http.Request) {
-	status, err := getStatus()
+func getStatuses() ([]Status, error) {
+	fsys := statusRoot.FS()
+
+	matches, err := fs.Glob(fsys, statusGlob)
 	if err != nil {
-		log.Printf("gatherStatus failed: %v", err)
+		return nil, err
+	}
+	sort.Strings(matches)
+
+	statuses := make([]Status, 0, len(matches))
+	for _, name := range matches {
+		data, err := fs.ReadFile(fsys, name)
+		if err != nil {
+			log.Printf("skip %s: %v", name, err)
+			continue
+		}
+		var s Status
+		if err := json.Unmarshal(data, &s); err != nil {
+			log.Printf("skip %s: bad json: %v", name, err)
+			continue
+		}
+		statuses = append(statuses, s)
+	}
+	return statuses, nil
+}
+
+func JsonHandler(w http.ResponseWriter, r *http.Request) {
+	statuses, err := getStatuses()
+	if err != nil {
+		log.Printf("getStatuses failed: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	data, err := json.Marshal(status)
+	data, err := json.Marshal(statuses)
 	if err != nil {
 		log.Printf("json serialization failed: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -99,20 +118,20 @@ func JsonHandler (w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//go:embed status_page.html
+//go:embed status_page.gohtml
 var templateFS embed.FS
-var statusTmpl = template.Must(template.ParseFS(templateFS, "status_page.html"))
+var statusTmpl = template.Must(template.ParseFS(templateFS, "status_page.gohtml"))
 
-func StatusHandler (w http.ResponseWriter, r *http.Request) {
-	status, err := getStatus()
+func StatusHandler(w http.ResponseWriter, r *http.Request) {
+	statuses, err := getStatuses()
 	if err != nil {
-		log.Printf("gatherStatus failed: %v", err)
+		log.Printf("getStatuses failed: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-    w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := statusTmpl.Execute(w, status); err != nil {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := statusTmpl.Execute(w, statuses); err != nil {
 		log.Printf("template execution error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -131,4 +150,37 @@ func (s *Status) MovePercent() int {
 		return 0
 	}
 	return s.CurrentMvMB * 100 / s.TotalMvMB
+}
+
+func clampFill(pct int) int {
+	if pct > 100 {
+		return 100
+	}
+	if pct < 0 {
+		return 0
+	}
+	return pct
+}
+
+func overflow(pct int) int {
+	if pct > 100 {
+		return pct - 100
+	}
+	return 0
+}
+
+func (s *Status) RipFill() int      { return clampFill(s.RipPercent()) }
+func (s *Status) RipOverflow() int  { return overflow(s.RipPercent()) }
+func (s *Status) MoveFill() int     { return clampFill(s.MovePercent()) }
+func (s *Status) MoveOverflow() int { return overflow(s.MovePercent()) }
+
+func (s *Status) ElapsedHMS() string {
+	sec := s.ElapsedSeconds
+	if sec < 0 {
+		sec = 0
+	}
+	h := sec / 3600
+	m := (sec % 3600) / 60
+	ss := sec % 60
+	return fmt.Sprintf("%d:%02d:%02d", h, m, ss)
 }

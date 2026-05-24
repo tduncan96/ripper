@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="2">
+    <title>Rip Status</title>
+        <style>
+        body {
+            margin: 0;
+            padding: 1rem;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .drive {
+            max-width: 600px;
+            margin: 0 0 2rem 0;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #333;
+        }
+        .drive-tag {
+            display: inline-block;
+            font-size: 0.75em;
+            font-weight: bold;
+            color: #1e1e1e;
+            background: #d4d4d4;
+            border-radius: 3px;
+            padding: 1px 6px;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        .bar {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            height: 22px;
+            background: #2d2d2d;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            margin: 4px 0 12px 0;
+        }
+        .bar-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background: #0eb64c;
+            border-radius: 3px 0 0 3px;
+        }
+        .bar-fill.move {
+            background: #60a5fa;
+        }
+        .bar-overflow {
+            position: absolute;
+            top: 0;
+            left: 100%;
+            height: 100%;
+            background: #f87171;
+            border-radius: 0 3px 3px 0;
+        }
+        .bar-text {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            text-shadow: 0 0 2px #000;
+            font-size: 12px;
+            z-index: 1;
+        }
+        .subtitle {
+            display: block;
+            font-size: 0.7em;
+            font-weight: normal;
+            font-style: italic;
+            color: #666;
+        }
+        .status {
+            font-style: italic;
+        }
+        .empty {
+            color: #666;
+            font-style: italic;
+        }
+        </style>
+    </head>
+    <body>
+        {{range .}}
+        <div class="drive">
+            <h3>
+                <span class="drive-tag">{{.Drive}}</span>
+                <span>{{.Title}}</span> &rArr; <span class="status">{{.Dest}}</span>
+                <span class="subtitle">{{.RawTitle}}</span>
+            </h3>
+            <span>{{.Updated}}</span><br>
+            Phase: <strong class="status">{{.Phase}}</strong><br>
+            Elapsed: <span class="status">{{.ElapsedHMS}}</span><br>
+            PID: <span class="status">{{.RunPID}}</span>
+            <span class="subtitle">({{.MKVPID}})</span>
+
+            <div>
+                <br>Rip progress:
+                <div class="bar">
+                    <div class="bar-fill rip" style="width: {{.RipFill}}%"></div>
+                    <div class="bar-overflow" style="width: {{.RipOverflow}}%"></div>
+                    <span class="bar-text">{{.CurrentRipMB}} MB / {{.TotalRipMB}} MB ({{.RipPercent}}%)</span>
+                </div>
+
+                Move progress:
+                <div class="bar">
+                    <div class="bar-fill move" style="width: {{.MoveFill}}%"></div>
+                    <div class="bar-overflow" style="width: {{.MoveOverflow}}%"></div>
+                    <span class="bar-text">{{.CurrentMvMB}} MB / {{.TotalMvMB}} MB ({{.MovePercent}}%)</span>
+                </div>
+            </div>
+        </div>
+        {{else}}
+        <p class="empty">No rip status files found.</p>
+        {{end}}
+    </body>
+</html>
