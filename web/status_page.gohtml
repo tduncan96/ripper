@@ -94,7 +94,9 @@
             <h3>
                 <span class="drive-tag">{{.Drive}}</span>
                 <span>{{.Title}}</span> &rArr; <span class="status">{{.Dest}}</span>
-                <span class="subtitle">{{.RawTitle}}</span>
+                <span class="subtitle">
+                    {{.RawTitle}} [{{.SelTracks}}]
+                </span>
             </h3>
             <span>{{.Updated}}</span><br>
             Phase: <strong class="status">{{.Phase}}</strong><br>
@@ -103,14 +105,12 @@
             <span class="subtitle">({{.MKVPID}})</span>
 
             <div>
-                <br>Rip progress:
                 <div class="bar">
                     <div class="bar-fill rip" style="width: {{.RipFill}}%"></div>
                     <div class="bar-overflow" style="width: {{.RipOverflow}}%"></div>
                     <span class="bar-text">{{.CurrentRipMB}} MB / {{.TotalRipMB}} MB ({{.RipPercent}}%)</span>
                 </div>
 
-                Move progress:
                 <div class="bar">
                     <div class="bar-fill move" style="width: {{.MoveFill}}%"></div>
                     <div class="bar-overflow" style="width: {{.MoveOverflow}}%"></div>

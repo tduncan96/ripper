@@ -31,6 +31,7 @@ type Status struct {
 	TotalRipMB     int     `json:"total_rip_mb"`
 	TotalMvMB      int     `json:"total_mv_mb"`
 	ElapsedSeconds int     `json:"elapsed_seconds"`
+	SelTracks      string  `json:"sel_tracks"`
 	Updated        string  `json:"updated"`
 	UpdatedEpoch   float64 `json:"updated_epoch"`
 	Drive          string  `json:"drive"`
