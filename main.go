@@ -14,6 +14,7 @@ func main() {
 	
 	http.HandleFunc("GET /{$}", web.StatusHandler)
 	http.HandleFunc("GET /json", web.JsonHandler)
+	http.HandleFunc("GET /logs/{drv}", web.LogHandler)
 
 	srv := &http.Server{
 		Addr: ":9511",

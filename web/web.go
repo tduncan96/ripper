@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"slices"
 
 	"github.com/joho/godotenv"
 )
@@ -36,6 +37,7 @@ type Status struct {
 	UpdatedEpoch   float64 `json:"updated_epoch"`
 	Drive          string  `json:"drive"`
 	Device         string  `json:"device"`
+	RipLog         string  `json:"rip_log"`
 }
 
 var (
@@ -43,6 +45,12 @@ var (
 	statusFile string
 	statusGlob string
 )
+
+func perDriveGlob(base string) string {
+	ext := filepath.Ext(base)
+	stem := strings.TrimSuffix(base, ext)
+	return stem + ".*" + ext
+}
 
 func OpenStatusFile() {
 	vars, err := godotenv.Read("/home/saturn-svc/.config/ripper/env.sh")
@@ -62,12 +70,6 @@ func OpenStatusFile() {
 	if err != nil {
 		log.Fatalf("opening status root %q: %v", dir, err)
 	}
-}
-
-func perDriveGlob(base string) string {
-	ext := filepath.Ext(base)
-	stem := strings.TrimSuffix(base, ext)
-	return stem + ".*" + ext
 }
 
 func getStatuses() ([]Status, error) {
@@ -116,6 +118,27 @@ func JsonHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("write failed: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+}
+
+func LogHandler(w http.ResponseWriter, r *http.Request) {
+	statuses, err := getStatuses()
+	if err != nil {
+		log.Printf("getStatuses failed: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	i := slices.IndexFunc(statuses, func(d Status) bool {return d.Drive == r.PathValue("drv")})
+	if i == -1 {
+		http.Error(w, "unknown drive", http.StatusNotFound)
+    	return
+	}
+	s := statuses[i]
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	if _, err := w.Write([]byte(s.RipLog)); err != nil {
+		log.Printf("write failed: %v", err)
 	}
 }
 
