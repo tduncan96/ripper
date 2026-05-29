@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/joho/godotenv"
+	"ripper/internal/preflight"
 )
 
 type Status struct {
@@ -41,9 +41,10 @@ type Status struct {
 }
 
 var (
-	statusRoot *os.Root
-	statusFile string
-	statusGlob string
+	statusRoot    *os.Root
+	statusTmpPath string
+	statusFile    string
+	statusGlob    string
 )
 
 func perDriveGlob(base string) string {
@@ -53,19 +54,13 @@ func perDriveGlob(base string) string {
 }
 
 func OpenStatusFile() {
-	vars, err := godotenv.Read("/home/saturn-svc/.config/ripper/env.sh")
-	if err != nil {
-		log.Fatal(err)
-	}
-	statusTmpPath, ok := vars["STATUS_TMP"]
-	if !ok {
-		log.Fatal("STATUS_TMP not set in config")
-	}
-
-	dir := filepath.Dir(statusTmpPath)
+	statusTmpPath = preflight.MasterConfig.RipConfig.StatusTmp
 	statusFile = filepath.Base(statusTmpPath)
 	statusGlob = perDriveGlob(statusFile)
 
+	dir := filepath.Dir(statusTmpPath)
+
+	var err error
 	statusRoot, err = os.OpenRoot(dir)
 	if err != nil {
 		log.Fatalf("opening status root %q: %v", dir, err)
@@ -208,7 +203,6 @@ func (s *Status) RipOverflow() int {
 func (s *Status) MoveOverflow() int {
 	return overflow(s.MovePercent())
 }
-
 
 func (s *Status) ElapsedHMS() string {
 	sec := s.ElapsedSeconds
