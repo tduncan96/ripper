@@ -40,8 +40,25 @@ var ripCommand = &cobra.Command{
 	},
 }
 
+var librarianCommand = &cobra.Command{
+	Use: "catalog",
+	Short: "Pulls full catalog of movies, shows, and music from Jellyfin and dumps it into Bookstack.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		script := filepath.Join(preflight.MasterConfig.SystemConfig.ScriptDir, "media-librarian.sh")
+
+		c := exec.Command(script)
+
+		var stderr bytes.Buffer
+		c.Stderr = &stderr
+		if err := c.Run(); err != nil {
+			return fmt.Errorf("medai cataloging failed during initialization: %w: %s", err, stderr.String())
+		}
+		return nil
+	},
+}
 func init() {
 	rootCmd.AddCommand(ripCommand)
+	rootCmd.AddCommand(librarianCommand)
 }
 
 // need to rewrite this and the bash script to also take directories as arguments so imports from config are honored
