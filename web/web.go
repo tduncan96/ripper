@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
-	"slices"
 
 	"github.com/joho/godotenv"
 )
@@ -129,10 +129,10 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	i := slices.IndexFunc(statuses, func(d Status) bool {return d.Drive == r.PathValue("drv")})
+	i := slices.IndexFunc(statuses, func(d Status) bool { return d.Drive == r.PathValue("drv") })
 	if i == -1 {
 		http.Error(w, "unknown drive", http.StatusNotFound)
-    	return
+		return
 	}
 	s := statuses[i]
 
@@ -193,10 +193,22 @@ func overflow(pct int) int {
 	return 0
 }
 
-func (s *Status) RipFill() int      { return clampFill(s.RipPercent()) }
-func (s *Status) RipOverflow() int  { return overflow(s.RipPercent()) }
-func (s *Status) MoveFill() int     { return clampFill(s.MovePercent()) }
-func (s *Status) MoveOverflow() int { return overflow(s.MovePercent()) }
+func (s *Status) RipFill() int {
+	return clampFill(s.RipPercent())
+}
+
+func (s *Status) MoveFill() int {
+	return clampFill(s.MovePercent())
+}
+
+func (s *Status) RipOverflow() int {
+	return overflow(s.RipPercent())
+}
+
+func (s *Status) MoveOverflow() int {
+	return overflow(s.MovePercent())
+}
+
 
 func (s *Status) ElapsedHMS() string {
 	sec := s.ElapsedSeconds
