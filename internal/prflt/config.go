@@ -14,11 +14,12 @@ type Config struct {
 		ScriptDir string
 	}
 	RipConfig struct {
-		Staging   string
 		Permanent string
+		Staging   string
 		StatusTmp string
 		LogTmp    string
 		NtfyURL   string
+		RipDBDir  string
 	}
 	LibrarianConfig struct {
 		JellyURL    string
@@ -36,20 +37,26 @@ var scriptFilePath string = "/usr/local/libexec"
 
 func (c Config) validate() (ripError, librError error) {
 	var ripMissing []string
-	if c.RipConfig.Staging == "" {
-		ripMissing = append(ripMissing, "STAGING")
-	}
 	if c.RipConfig.Permanent == "" {
 		ripMissing = append(ripMissing, "PERMANENT")
 	}
+	if c.RipConfig.Staging == "" {
+		c.RipConfig.Staging = c.RipConfig.Permanent
+		if c.RipConfig.Staging == "" {
+			ripMissing = append(ripMissing, "STAGING")
+		}
+	}
 	if c.RipConfig.StatusTmp == "" {
-		ripMissing = append(ripMissing, "STATUS_TMP")
+		c.RipConfig.StatusTmp = "/tmp/*.rip-status.json"
 	}
 	if c.RipConfig.LogTmp == "" {
-		ripMissing = append(ripMissing, "LOG_TMP")
+		c.RipConfig.LogTmp = "/tmp/*.rip.log"
 	}
 	if c.RipConfig.NtfyURL == "" {
 		ripMissing = append(ripMissing, "NTFY_URL")
+	}
+	if c.RipConfig.RipDBDir == "" {
+		c.RipConfig.RipDBDir = "/opt/ripper"
 	}
 
 	if len(ripMissing) > 0 {
@@ -103,7 +110,7 @@ func ReadConfigFiles() (ripErr, librErr, error error) {
 	}
 	defer configDir.Close()
 
-	configList, err := configDir.ReadDir(-1)
+	configList, err := configDir.ReadDir(0)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -114,11 +121,12 @@ func ReadConfigFiles() (ripErr, librErr, error error) {
 			return nil, nil, err
 		}
 		if file.Name() == "rip.env" {
-			MasterConfig.RipConfig.Staging = vars["STAGING"]      // /mnt/staging
 			MasterConfig.RipConfig.Permanent = vars["PERMANENT"]  // /mnt/14tb_sata_1/media
+			MasterConfig.RipConfig.Staging = vars["STAGING"]      // /mnt/staging
 			MasterConfig.RipConfig.StatusTmp = vars["STATUS_TMP"] // /tmp/*.rip-status.json
 			MasterConfig.RipConfig.LogTmp = vars["LOG_TMP"]       // /tmp/*.rip.log
 			MasterConfig.RipConfig.NtfyURL = vars["NTFY_URL"]
+			MasterConfig.RipConfig.RipDBDir = vars["RIP_DB_DIR"] // /opt/ripper
 		} else if file.Name() == "libr.env" {
 			MasterConfig.LibrarianConfig.JellyURL = vars["JELLYFIN_URL"]
 			MasterConfig.LibrarianConfig.JellyKey = vars["JELLYFIN_API_KEY"]

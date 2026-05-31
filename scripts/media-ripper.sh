@@ -3,11 +3,10 @@ set -uo pipefail
 
 # === Helper functions ===
     exit_handler() {
-        local msg="$1"
-        local code="${2:-255}"
-        local phase
+        local msg="$1" phase
+        EXIT_CODE="${2:-255}"
 
-        # Error codes:
+        # Error exit codes:
         # 1 -> Pre-flight error
         # 2 -> No disc in drive error
         # 3 -> Disc error
@@ -15,18 +14,16 @@ set -uo pipefail
         # 5 -> MakeMKV error
         # 6 -> File indexing error
 
-        if (( code == 0 )); then
+        if (( EXIT_CODE == 0 )); then
             phase="Complete"
         else
-            phase="Failed [$code]"
+            phase="Failed [$EXIT_CODE]"
         fi
 
-        write_status "$phase"
+        echo -e "[$EXIT_CODE] $msg"
+        [[ -n "${NTFY_URL:-}" ]] && curl -sd "[${DRIVE_TAG:-?}] [$EXIT_CODE] $msg" "$NTFY_URL"
 
-        echo -e "[$code] $msg"
-        [[ -n "${NTFY_URL:-}" ]] && curl -sd "[${DRIVE_TAG:-?}] [$code] $msg" "$NTFY_URL"
-
-        if (( code == 1 )) || (( code == 130 )); then eject_flag=false; fi
+        if (( EXIT_CODE == 1 )) || (( EXIT_CODE == 130 )); then eject_flag=false; fi
         if $eject_flag && drive_state; then
             echo "Ejecting disc ..."
             eject "$DEVICE"
@@ -60,10 +57,14 @@ set -uo pipefail
         fi
         echo "Exporting log to $log_dest ..."
         cp "$LOG" "$log_dest"
-        rm -rf "$LOG"
+
+        write_status "$phase"
+        
+        echo "Creating record ..."
+        ripper record # Internal cobra command -> ripper/cmd/dbcmd.go
 
         echo "merciful bliss ..."
-        exit "$code"
+        exit "$EXIT_CODE"
     }
 
     # shellcheck disable=SC2329
@@ -129,6 +130,7 @@ set -uo pipefail
             --arg updated "$(date)" \
             --argjson updated_epoch "$now" \
             --arg rip_log "$(cat "$LOG")" \
+            --argjson exit "${EXIT_CODE:-0}" \
             '{
                 start: ($start | todate),
                 start_epoch: $start,
@@ -149,7 +151,8 @@ set -uo pipefail
                 elapsed_seconds: $elapsed_seconds,
                 updated: $updated,
                 updated_epoch: $updated_epoch,
-                rip_log: $rip_log
+                rip_log: $rip_log,
+                exit_code: $exit_code
             }' > "$STATUS.tmp" && mv "$STATUS.tmp" "$STATUS"
     }
 
@@ -221,8 +224,8 @@ set -uo pipefail
     done
     shift $((OPTIND - 1))
 
-    STAGING="${1:-}"
-    PERMANENT="${2:-}"
+    PERMANENT="${1:-}"
+    STAGING="${2:-}"
     STATUS_TMP="${3:-}"
     LOG_TMP="${4:-}"
     NTFY_URL="${5:-}"
@@ -554,8 +557,8 @@ set -uo pipefail
     wait $MKV_PID
     mkv_exit=$?
 
-    echo "Rip exited with code: $mkv_exit"
-    # (( mkv_exit != 0 )) && exit_handler "MakeMKV rip failed with exit code $mkv_exit" 5
+    echo "Rip exited with EXIT_CODE: $mkv_exit"
+    # (( mkv_exit != 0 )) && exit_handler "MakeMKV rip failed with exit EXIT_CODE $mkv_exit" 5
 
     echo "Final output from disc:"
     tree -htFDQ --du "$BATCH_DIR"

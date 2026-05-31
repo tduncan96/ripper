@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"ripper/internal/prflt"
@@ -38,6 +39,7 @@ type Status struct {
 	Drive          string  `json:"drive"`
 	Device         string  `json:"device"`
 	RipLog         string  `json:"rip_log"`
+	ExitCode       int     `json:"exit_code"`
 }
 
 var (
@@ -60,9 +62,7 @@ func OpenStatusFile() {
 }
 
 func getStatuses() ([]Status, error) {
-	fsys := statusRoot.FS()
-
-	matches, err := fs.Glob(fsys, statusGlob)
+	matches, err := fs.Glob(statusRoot.FS(), statusGlob)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func getStatuses() ([]Status, error) {
 
 	statuses := make([]Status, 0, len(matches))
 	for _, name := range matches {
-		data, err := fs.ReadFile(fsys, name)
+		data, err := fs.ReadFile(statusRoot.FS(), name)
 		if err != nil {
 			log.Printf("skip %s: %v", name, err)
 			continue
@@ -83,6 +83,20 @@ func getStatuses() ([]Status, error) {
 		statuses = append(statuses, s)
 	}
 	return statuses, nil
+}
+
+func GetStatus(drv string) (s Status, err error) {
+	file := strings.ReplaceAll(statusTmpPath, "*", drv)
+	data, err := fs.ReadFile(statusRoot.FS(), file)
+	if err != nil {
+		return Status{}, err
+	}
+
+	if err := json.Unmarshal(data, &s); err != nil {
+		return Status{}, err
+	}
+
+	return s, nil
 }
 
 func JsonHandler(w http.ResponseWriter, r *http.Request) {

@@ -45,8 +45,8 @@ var ripCommand = &cobra.Command{
 
 		c := exec.Command(
 			script,        // 0
-			staging,       // 1
-			permanent,     // 2
+			permanent,     // 1
+			staging,       // 2
 			statusTmpPath, // 3
 			logTmpPath,    // 4
 			ntfyURL,       // 5
@@ -73,9 +73,9 @@ var librarianCommand = &cobra.Command{
 			return librGate
 		}
 
-		librConfig := prflt.MasterConfig.LibrarianConfig
-
 		script := filepath.Join(prflt.MasterConfig.SystemConfig.ScriptDir, "media-librarian.sh")
+
+		librConfig := prflt.MasterConfig.LibrarianConfig
 
 		c := exec.Command(
 			script,                                 // 0
