@@ -21,12 +21,12 @@ type Config struct {
 		NtfyURL   string
 	}
 	LibrarianConfig struct {
+		JellyURL    string
+		JellyKey    string
 		BookURL     string
 		BookPageID  string
 		BookTokenID string
 		BookKey     string
-		JellyURL    string
-		JellyKey    string
 	}
 }
 
@@ -59,6 +59,12 @@ func (c Config) validate() (ripError, librError error) {
 	}
 
 	var librMissing []string
+	if c.LibrarianConfig.JellyURL == "" {
+		librMissing = append(librMissing, "JELLYFIN_URL")
+	}
+	if c.LibrarianConfig.JellyKey == "" {
+		librMissing = append(librMissing, "JELLYFIN_API_KEY")
+	}
 	if c.LibrarianConfig.BookURL == "" {
 		librMissing = append(librMissing, "BOOKSTACK_URL")
 	}
@@ -70,12 +76,6 @@ func (c Config) validate() (ripError, librError error) {
 	}
 	if c.LibrarianConfig.BookTokenID == "" {
 		librMissing = append(librMissing, "BOOKSTACK_TOKEN_ID")
-	}
-	if c.LibrarianConfig.JellyURL == "" {
-		librMissing = append(librMissing, "JELLYFIN_URL")
-	}
-	if c.LibrarianConfig.JellyKey == "" {
-		librMissing = append(librMissing, "JELLYFIN_API_KEY")
 	}
 
 	if len(librMissing) > 0 {
@@ -114,18 +114,18 @@ func ReadConfigFiles() (ripErr, librErr, error error) {
 			return nil, nil, err
 		}
 		if file.Name() == "rip.env" {
-			MasterConfig.RipConfig.Staging = vars["STAGING"]
-			MasterConfig.RipConfig.Permanent = vars["PERMANENT"]
-			MasterConfig.RipConfig.StatusTmp = vars["STATUS_TMP"]
-			MasterConfig.RipConfig.LogTmp = vars["LOG_TMP"]
+			MasterConfig.RipConfig.Staging = vars["STAGING"]      // /mnt/staging
+			MasterConfig.RipConfig.Permanent = vars["PERMANENT"]  // /mnt/14tb_sata_1/media
+			MasterConfig.RipConfig.StatusTmp = vars["STATUS_TMP"] // /tmp/*.rip-status.json
+			MasterConfig.RipConfig.LogTmp = vars["LOG_TMP"]       // /tmp/*.rip.log
 			MasterConfig.RipConfig.NtfyURL = vars["NTFY_URL"]
 		} else if file.Name() == "libr.env" {
+			MasterConfig.LibrarianConfig.JellyURL = vars["JELLYFIN_URL"]
+			MasterConfig.LibrarianConfig.JellyKey = vars["JELLYFIN_API_KEY"]
 			MasterConfig.LibrarianConfig.BookURL = vars["BOOKSTACK_URL"]
 			MasterConfig.LibrarianConfig.BookPageID = vars["BOOKSTACK_PAGE_ID"]
 			MasterConfig.LibrarianConfig.BookTokenID = vars["BOOKSTACK_TOKEN_ID"]
 			MasterConfig.LibrarianConfig.BookKey = vars["BOOKSTACK_API_KEY"]
-			MasterConfig.LibrarianConfig.JellyURL = vars["JELLYFIN_URL"]
-			MasterConfig.LibrarianConfig.JellyKey = vars["JELLYFIN_API_KEY"]
 		}
 	}
 

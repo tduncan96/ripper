@@ -73,9 +73,20 @@ var librarianCommand = &cobra.Command{
 			return librGate
 		}
 
+		librConfig := prflt.MasterConfig.LibrarianConfig
+
 		script := filepath.Join(prflt.MasterConfig.SystemConfig.ScriptDir, "media-librarian.sh")
 
-		c := exec.Command(script)
+		c := exec.Command(
+			script,                                 // 0
+			librConfig.JellyURL,                    // 1
+			librConfig.JellyKey,                    // 2
+			librConfig.BookURL,                     // 3
+			librConfig.BookPageID,                  // 4
+			librConfig.BookTokenID,                 // 5
+			librConfig.BookKey,                     // 6
+			prflt.MasterConfig.RipConfig.Permanent, // 7
+		)
 
 		var stderr bytes.Buffer
 		c.Stderr = &stderr

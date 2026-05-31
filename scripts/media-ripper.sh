@@ -7,12 +7,6 @@ set -uo pipefail
         local code="${2:-255}"
         local phase
 
-        if [[ -n "${tail_pid:-}" ]]; then
-            kill "$tail_pid" 2>/dev/null
-            wait "$tail_pid" 2>/dev/null
-        fi
-        sync
-
         # Error codes:
         # 1 -> Pre-flight error
         # 2 -> No disc in drive error
@@ -30,10 +24,9 @@ set -uo pipefail
         write_status "$phase"
 
         echo -e "[$code] $msg"
-        curl -sd "[$DRIVE_TAG] [$code] $msg" NTFY_URL
+        [[ -n "${NTFY_URL:-}" ]] && curl -sd "[${DRIVE_TAG:-?}] [$code] $msg" "$NTFY_URL"
 
-        if (( code == 1 )); then eject_flag=false; fi
-
+        if (( code == 1 )) || (( code == 130 )); then eject_flag=false; fi
         if $eject_flag && drive_state; then
             echo "Ejecting disc ..."
             eject "$DEVICE"
@@ -66,22 +59,25 @@ set -uo pipefail
             log_dest="$fallback_dir/$ts.rip.log"
         fi
         echo "Exporting log to $log_dest ..."
-        cp "$log" "$log_dest"
-        rm -rf "$log"
+        cp "$LOG" "$log_dest"
+        rm -rf "$LOG"
 
         echo "merciful bliss ..."
         exit "$code"
     }
 
     # shellcheck disable=SC2329
-    cleanup_on_signal() {
+    on_signal() {
         trap '' INT TERM
         echo ""
-        echo "Signal received, cleaning up child processes ..."
-        [[ -n "${MKV_PID:-}" ]] && kill -TERM "$MKV_PID" 2>/dev/null
-        [[ -n "${tail_pid:-}" ]] && kill -TERM "$tail_pid" 2>/dev/null
+        echo "Signal received, cleaning up ..."
+        for p in "${MKV_PID:-}" "${rsync_pid:-}"; do
+            [[ -n "$p" ]] && kill -TERM "$p" 2>/dev/null
+        done
         sleep 2
-        [[ -n "${MKV_PID:-}" ]] && kill -KILL "$MKV_PID" 2>/dev/null
+        for p in "${MKV_PID:-}" "${rsync_pid:-}"; do
+            [[ -n "$p" ]] && kill -KILL "$p" 2>/dev/null
+        done
         exit_handler "Interrupted by signal" 130
     }
 
@@ -98,24 +94,6 @@ set -uo pipefail
         echo "${result:-$fallback}"
     }
 
-    staged_paths_remain() {
-        local p
-        for p in "${STAGED_PATHS[@]}"; do
-            [[ -e "$p" ]] && return 0
-        done
-        return 1
-    }
-
-    staged_paths_size() {
-        local total=0 p sz
-        for p in "${STAGED_PATHS[@]}"; do
-            [[ -e "$p" ]] || continue
-            sz=$(safe_du "$p" 0)
-            total=$(( total + sz ))
-        done
-        echo "$total"
-    }
-
     write_status() {
         local phase="$1"
         local now elapsed_seconds full_dest
@@ -125,7 +103,7 @@ set -uo pipefail
         now=$(date +%s)
         elapsed_seconds=$((now - START))
 
-        if [[ "$phase" == "Ripping" ]]; then
+        if [[ "$phase" == "Ripping ..." ]]; then
             full_dest="$BATCH_DIR"
         else
             full_dest="$PERM_DIR"
@@ -150,7 +128,7 @@ set -uo pipefail
             --argjson elapsed_seconds "${elapsed_seconds:-0}" \
             --arg updated "$(date)" \
             --argjson updated_epoch "$now" \
-            --arg rip_log "$(cat $log)" \
+            --arg rip_log "$(cat "$LOG")" \
             '{
                 start: ($start | todate),
                 start_epoch: $start,
@@ -206,8 +184,7 @@ set -uo pipefail
     sibling_in_starting() {
         local now f data phase upd
         now=$(date +%s)
-        local pattern="${STATUS%.*}.*.${STATUS##*.}"
-        for f in $pattern; do
+        for f in $STATUS_TMP; do
             [[ -e "$f" ]] || continue
             [[ "$f" == "$STATUS" ]] && continue
             data=$(jq -r '[.phase // "", .updated_epoch // 0] | @tsv' "$f" 2>/dev/null) || continue
@@ -222,7 +199,28 @@ set -uo pipefail
 
 # === Initialization ===
     START=$(date +%s)
+
+    declare -a STAGED_PATHS=()
+
+    eject_flag=false
+    track_select=false
+
+    deps=(makemkvcon jq inotifywait file clamdscan rsync tree eject curl ts flock lsof sudo)
+    for dep in "${deps[@]}"; do
+        if ! command -v "$dep"; then
+            exit_handler "Missing required dependency: $dep" 1
+        fi
+    done
     
+    while getopts "Et" opt; do
+        case $opt in
+            E) eject_flag=true ;;
+            t) track_select=true ;;
+            *) echo "[?] Invalid option: -$OPTARG"; exit 1 ;;
+        esac
+    done
+    shift $((OPTIND - 1))
+
     STAGING="${1:-}"
     PERMANENT="${2:-}"
     STATUS_TMP="${3:-}"
@@ -232,67 +230,27 @@ set -uo pipefail
     MEDIA="${7:-}"
     SEASON="${8:-}"
 
-    DEVICE="/dev/sr$DRIVE_NUM"
-    DRIVE_TAG="$(basename "$DEVICE")".
+    DRIVE_TAG="sr$DRIVE_NUM"
+    DEVICE="/dev/$DRIVE_TAG"
     STATUS="${STATUS_TMP/\*/$DRIVE_TAG}"
     LOG="${LOG_TMP/\*/$DRIVE_TAG}"
-    RIPPING="$STAGING/.ripping"
 
     WAIT_POLL_SECS=10
     WAIT_MAX_SECS=5400
     RESERVE_STALE_SECS=120
 
-    DEST_REL=""
-    RAW_TITLE=""
-    TITLE=""
-    BATCH_DIR=""
-    PERM_DIR=""
-    MKV_INDEX=""
-    SEL_TRACKS=""
-
-    declare -a STAGED_PATHS=()
-
-    eject_flag=false
-    track_select=false
-
     exec > >(ts '%Y-%m-%d %H:%M:%S' | tee -a "$LOG") 2>&1
     echo "Run PID: $$"
     echo "Command Received: $0 $*"
     echo "Start: $(date)"
-
-    curl -sd "Rip Request Received" NTFY_URL
-
-
-# === Arg parsing and preflight ===
-    deps=(makemkvcon jq inotifywait)
-    for dep in "${deps[@]}"; do
-        if ! command -v "dep"; then
-            exit_handler "Missing required dependency: $dep" 1
-        fi
-    done
-    
-    while getopts "Et" opt; do
-        case $opt in
-            E) eject_flag=true ;;
-            t) track_select=true ;;
-            *) exit_handler "[?] Invalid option: -$OPTARG" 1 ;;
-        esac
-    done
-    shift $((OPTIND - 1))
-
-    if [[ -z "$DRIVE_NUM" ]]; then
-        echo "Missing drive number. $USAGE"; exit 1
-    fi
-    if [[ ! "$DRIVE_NUM" =~ ^[0-9]+$ ]]; then
-        echo "Drive number must be a non-negative integer (got '$DRIVE_NUM'). $USAGE"; exit 1
-    fi
-
     echo "Drive: $DEVICE (tag: $DRIVE_TAG)"
-    echo "Status file: $STATUS"
 
-    trap cleanup_on_signal INT TERM
+    curl -sd "Rip Request Received" "$NTFY_URL"
 
+
+# === Preflight ===
     write_status "Starting"
+    trap on_signal INT TERM
 
     if [[ ! -b "$DEVICE" ]]; then exit_handler "Device '$DEVICE' is not a block device." 1; fi
 
@@ -312,11 +270,9 @@ set -uo pipefail
         exit_handler "Error! Lock for $DRIVE_TAG held by existing processes. Exiting ..." 1
     fi
 
-    if ! systemctl is-active --quiet staging-watcher; then exit_handler "Service staging-watcher is not running." 1; fi
-
     if ! smart_result=$(sudo -n /root/scripts/smart_check.sh "$STAGING" 2>&1); then
         echo "WARNING: $smart_result"
-        curl -sd "[$DRIVE_TAG] WARN: SMART check on staging - $smart_result" NTFY_URL
+        curl -sd "[$DRIVE_TAG] WARN: SMART check on staging - $smart_result" "$NTFY_URL"
     else
         echo "SMART check: $smart_result"
     fi
@@ -353,7 +309,7 @@ set -uo pipefail
     fi
     echo "MakeMKV index for $DEVICE: disc:$MKV_INDEX"
 
-# === Disc info and title parsing ===
+# === Disc info, title parsing, and directory setting ===
     echo "Getting disc info ..."
     write_status "Getting Disc Info ..."
     INFO_OUTPUT=$(makemkvcon -r info "disc:$MKV_INDEX")
@@ -381,11 +337,12 @@ set -uo pipefail
         fi
     fi
 
-# === Directory Setting ===
     STAGE_DIR="$STAGING/$DEST_REL"
     PERM_DIR="$PERMANENT/$DEST_REL"
-    BATCH_DIR="$RIPPING/$RAW_TITLE.$(date +"%Y-%m-%d_%H-%M-%S")"
+    BATCH_DIR="$STAGING/.ripping/$RAW_TITLE.$(date +"%Y-%m-%d_%H-%M-%S")"
     mkdir -p "$BATCH_DIR"
+    mkdir -p "$STAGING/.quarantine"
+    mkdir -p "$STAGING/.review"
     echo "Batch directory created: $BATCH_DIR"
     echo "Destination: $DEST_REL"
 
@@ -503,11 +460,11 @@ set -uo pipefail
         echo "Selected tracks: ${selected_tracks[*]}"
     else
         if [[ "$MEDIA" == "movie" ]]; then
-            max_bytes=
-            largest_track=
+            max_bytes=0
+            largest_track=0
             for k in "${!TITLE_BYTES[@]}"; do
                 v=${TITLE_BYTES[$k]}
-                if [[ -z "$max" || "$v" -gt "$max" ]]
+                if [[ -z "$max_bytes" || "$v" -gt "$max_bytes" ]]; then
                     max_bytes=$v
                     largest_track=$k
                 fi
@@ -568,7 +525,7 @@ set -uo pipefail
 
     CURRENT_RIP_MB=0
     if $track_select; then
-        curl -sd "[$DRIVE_TAG] Ripping ${#selected_tracks[@]} tracks: $TITLE -> $BATCH_DIR" NTFY_URL
+        curl -sd "[$DRIVE_TAG] Ripping ${#selected_tracks[@]} tracks: $TITLE -> $BATCH_DIR" "$NTFY_URL"
         (
             trap 'kill -TERM "${child:-}" 2>/dev/null; exit 130' TERM INT
             for t in "${selected_tracks[@]}"; do
@@ -583,7 +540,7 @@ set -uo pipefail
         MKV_PID=$!
         echo "Driver PID: $MKV_PID"
     else
-        curl -sd "[$DRIVE_TAG] Ripping: $TITLE -> $BATCH_DIR" NTFY_URL
+        curl -sd "[$DRIVE_TAG] Ripping: $TITLE -> $BATCH_DIR" "$NTFY_URL"
         makemkvcon mkv "disc:$MKV_INDEX" "$SEL_TRACKS" "$BATCH_DIR" &
         MKV_PID=$!
         echo "MakeMKV PID: $MKV_PID"
@@ -591,7 +548,7 @@ set -uo pipefail
 
     while kill -0 $MKV_PID 2>/dev/null; do
         CURRENT_RIP_MB=$(safe_du "$BATCH_DIR")
-        write_status "Ripping"
+        write_status "Ripping ..."
         sleep 1
     done
     wait $MKV_PID
@@ -602,14 +559,6 @@ set -uo pipefail
 
     echo "Final output from disc:"
     tree -htFDQ --du "$BATCH_DIR"
-
-# === Tail check.log into rip.log for the move phase ===
-    stdbuf -oL tail -n 0 -F "/var/log/staging-watcher/check.log" >> "$LOG" &
-    tail_pid=$!
-    trap 'kill "${tail_pid:-}" 2>/dev/null' EXIT
-    echo "Check Tail PID: $tail_pid"
-
-    sleep 5
 
 # === Sort phase ===
     sorted_files=()
@@ -695,19 +644,12 @@ set -uo pipefail
             f_size=$(stat -c%s "$f" | awk '{printf "%d", $1/1024/1024}')
             i=$(( ep + offset ))
 
-            if (( f_size > trash_thresh )); then
+            if (( f_size > trash_thresh )) || (( f_size < extras_thresh )); then
                 mkdir -p "$STAGING/.review"
                 dest="$STAGING/.review/$RAW_TITLE.$(basename "$f")"
                 echo "title $tn: $(basename "$f") '$name' ($dur) -> $dest (review, not tracked)"
                 mv "$f" "$dest"
                 continue
-            elif (( f_size <= extras_thresh )); then
-                j=1
-                dest="$STAGE_DIR/Extras/$TITLE S$SEASON Extra ${j}.mkv"
-                while [[ -e "$dest" || -e "$PERM_DIR/Extras/$TITLE S$SEASON Extra ${j}.mkv" ]]; do
-                    ((j++))
-                    dest="$STAGE_DIR/Extras/$TITLE S$SEASON Extra ${j}.mkv"
-                done
             else
                 dest="$STAGE_DIR/$TITLE S${SEASON}E${i}.mkv"
                 if [[ -e "$dest" ]]; then
@@ -759,27 +701,93 @@ set -uo pipefail
         eject_flag=false
     fi
 
-# === Drain wait ===
-    echo "Rip Complete! Files staged to: $STAGE_DIR. Waiting for staging pipeline to complete ..."
+# === Scan phase===
+    allowed_mimes=(
+        "video/x-matroska"
+        "video/mp4"
+        "video/x-msvideo"
+        "video/mpeg"
+        "application/x-bittorrent"
+        "application/zip"
+        "application/gzip"
+        "application/x-tar"
+        "text/plain"
+    )
+    declare -A scanners
+    
+    write_status "Scanning ..."
 
-    CURRENT_MV_MB=0
-    STAGE_START_SIZE=$(staged_paths_size)
-    echo "Initial drain pool: ${STAGE_START_SIZE} MB"
+    while IFS= read -r -d '' file; do
+        echo "Processing: $(basename "$file")"
+        {
+            mime="$(file --mime-type -b "$file")"
+            mime_ok=false
+            for allowed in "${allowed_mimes[@]}"; do
+                [[ "$mime" == "$allowed" ]] && { mime_ok=true; break; }
+            done
+            if [[ "$mime_ok" == false ]]; then
+                echo "FAIL: Unexpected MIME type '$mime' for $file; $file  -> $STAGING/.quarantine"
+                mv "$file" "$STAGING/.quarantine/"
+                exit 1
+            fi
+            if ! clamdscan --quiet "$file"; then
+                echo "FAIL: ClamAV flagged $file; $file  -> $STAGING/.quarantine"
+                mv "$file" "$STAGING/.quarantine/"
+                exit 1
+            fi
+        } &
+        scanners[$!]="$file"
+    done < <(find "$STAGE_DIR" -type f -print0)
 
-    while staged_paths_remain; do
-        stage_current=$(staged_paths_size)
-        CURRENT_MV_MB=$(( STAGE_START_SIZE - stage_current ))
-        (( CURRENT_MV_MB < 0 )) && CURRENT_MV_MB=0
-        (( CURRENT_MV_MB > TOTAL_MB )) && CURRENT_MV_MB=$TOTAL_MB
-        write_status "Moving"
+    while (( ${#scanners[@]} > 0 )); do
+        for pid in "${!scanners[@]}"; do
+            if ! kill -0 "$pid" 2>/dev/null; then
+                wait "$pid"
+                status=$?
+                if ((status == 0)); then
+                    echo "scan done: ${scanners[$pid]}"
+                else
+                    echo "FAIL: exit (${status}) ${scanners[$pid]}; ${scanners[$pid]} -> $STAGING/.quarantine"
+                fi
+                unset 'scanners[$pid]'
+            fi
+        done
+        write_status "Scanning ..."
         sleep 1
     done
 
-    echo "File moves complete."
+    echo "File scans complete!" 
 
-    stage_current=$(staged_paths_size)
-    CURRENT_MV_MB=$(( STAGE_START_SIZE - stage_current ))
-    (( CURRENT_MV_MB < 0 )) && CURRENT_MV_MB=0
-    (( CURRENT_MV_MB > TOTAL_MB )) && CURRENT_MV_MB=$TOTAL_MB
+# === Promote staged files to permanent ===
+    echo "Promoting staged files to $PERM_DIR ..."
+    mkdir -p "$PERM_DIR"
+
+    exec 201>"/var/lock/movie-ripper.promote.lock"
+    flock 201
+
+    PERM_BASE=$(safe_du "$PERM_DIR")
+    STAGE_TOTAL=$(safe_du "$STAGE_DIR")
+    CURRENT_MV_MB=0
+    write_status "Moving ..."
+
+    rsync -a --inplace --remove-source-files "$STAGE_DIR/" "$PERM_DIR/" &
+    rsync_pid=$!
+    while kill -0 "$rsync_pid" 2>/dev/null; do
+        CURRENT_MV_MB=$(( $(safe_du "$PERM_DIR") - PERM_BASE ))
+        (( CURRENT_MV_MB < 0 )) && CURRENT_MV_MB=0
+        (( CURRENT_MV_MB > STAGE_TOTAL )) && CURRENT_MV_MB=$STAGE_TOTAL
+        write_status "Moving"
+        sleep 1
+    done
+    wait "$rsync_pid"; rc=$?
+
+    find "$STAGE_DIR" -type d -empty -delete 2>/dev/null || true
+
+    if (( rc != 0 )); then
+        echo "WARN: rsync exited $rc; unverified files left in $STAGE_DIR"
+    fi
+    CURRENT_MV_MB=$STAGE_TOTAL
+    write_status "Moving ..."
+    echo "Promotion complete."
 
 exit_handler "Pipeline complete for $DEST_REL." 0

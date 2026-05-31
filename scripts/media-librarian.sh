@@ -7,27 +7,19 @@ trap 'rm -f "$LOG_FILE"' EXIT
 
 log() { printf '[%s] %s\n' "$(date -Iseconds)" "$*"; }
 
-JELLYFIN_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/jellyfin/env.sh"
-if [[ ! -f "$JELLYFIN_CONFIG_FILE" ]]; then echo "Could not find config file: $JELLYFIN_CONFIG_FILE"; exit 1; fi
-# shellcheck source=/home/saturn-svc/.config/jellyfin/env.sh
-# shellcheck disable=SC1091
-source "$JELLYFIN_CONFIG_FILE"
-log "$JELLYFIN_CONFIG_FILE loaded."
 
-BOOKSTACK_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/bookstack/env.sh"
-if [[ ! -f "$BOOKSTACK_CONFIG_FILE" ]]; then echo "Could not find config file: $BOOKSTACK_CONFIG_FILE"; exit 1; fi
-# shellcheck source=/home/saturn-svc/.config/bookstack/env.sh
-# shellcheck disable=SC1091
-source "$BOOKSTACK_CONFIG_FILE"
-log "$BOOKSTACK_CONFIG_FILE loaded."
+JELLYFIN_URL="$1"
+JELLYFIN_API_KEY="$2"
+BOOKSTACK_URL="$3"
+BOOKSTACK_PAGE_ID="$4"
+BOOKSTACK_TOKEN_ID="$5"
+BOOKSTACK_API_KEY="$6"
+OUT_DIR="$7"
 
-JELLYFIN_URL="http://saturn:8096"
-API_KEY="${JELLYFIN_API_KEY:?set JELLYFIN_API_KEY}"
-OUT_DIR="/mnt/14tb_sata_1/media"
 mkdir -p "$OUT_DIR"
 
 curl_jf() {
-  curl -fsS -H "X-Emby-Token: $API_KEY" "$JELLYFIN_URL$1"
+  curl -fsS -H "X-Emby-Token: $JELLYFIN_API_KEY" "$JELLYFIN_URL"
 }
 
 log "Fetching movies"
@@ -85,13 +77,9 @@ log "Generating catalog markdown"
   jq -r '.[] | "- \(.artist // "Unknown") — \(.album) (\(.year // "?")) — \(.track_count) tracks"' "$OUT_DIR/albums.json" | sort
 } > "$OUT_DIR/catalog.md"
 
-BOOKSTACK_URL="${BOOKSTACK_URL:?set BOOKSTACK_URL}"
-BOOKSTACK_TOKEN_ID="${BOOKSTACK_TOKEN_ID:?set BOOKSTACK_TOKEN_ID}"
-BOOKSTACK_TOKEN_SECRET="${BOOKSTACK_API_TOKEN:?set BOOKSTACK_API_TOKEN}"
-BOOKSTACK_PAGE_ID="${BOOKSTACK_MEDIA_PAGE_ID:?set BOOKSTACK_MEDIA_PAGE_ID}"
 
 curl_bs() {
-  curl -fsS -H "Authorization: Token ${BOOKSTACK_TOKEN_ID}:${BOOKSTACK_TOKEN_SECRET}" "$@"
+  curl -fsS -H "Authorization: Token ${BOOKSTACK_TOKEN_ID}:${BOOKSTACK_API_KEY}" "$@"
 }
 
 if jq -Rs '{markdown: ., name: "Media Catalog"}' < "$OUT_DIR/catalog.md" \
