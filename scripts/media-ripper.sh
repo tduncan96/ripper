@@ -30,8 +30,7 @@ set -uo pipefail
         write_status "$phase"
 
         echo -e "[$code] $msg"
-        # CHANGED: tag ntfy body with drive tag
-        curl -sd "[$DRIVE_TAG] [$code] $msg" ntfy.sh/saturn-rips
+        curl -sd "[$DRIVE_TAG] [$code] $msg" NTFY_URL
 
         if (( code == 1 )); then eject_flag=false; fi
 
@@ -50,14 +49,14 @@ set -uo pipefail
 
         local log_dest
         if [[ -n "$DEST_REL" ]]; then
-            log_dest="$PERMANENT/$DEST_REL/Logs/$RAW_TITLE.rip.log"
+            log_dest="$PERMANENT/$DEST_REL/logs/$RAW_TITLE.rip.log"
             mkdir -p "$(dirname "$log_dest")"
             if [[ -e "$log_dest" ]]; then
                 local j=1
-                while [[ -e "$PERMANENT/$DEST_REL/Logs/$RAW_TITLE(${j}).rip.log" ]]; do
+                while [[ -e "$PERMANENT/$DEST_REL/logs/$RAW_TITLE(${j}).rip.log" ]]; do
                     ((j++))
                 done
-                log_dest="$PERMANENT/$DEST_REL/Logs/$RAW_TITLE(${j}).rip.log"
+                log_dest="$PERMANENT/$DEST_REL/logs/$RAW_TITLE(${j}).rip.log"
             fi
         else
             local ts fallback_dir
@@ -67,8 +66,8 @@ set -uo pipefail
             log_dest="$fallback_dir/$ts.rip.log"
         fi
         echo "Exporting log to $log_dest ..."
-        cp "$LOG" "$log_dest"
-        rm -rf "$LOG"
+        cp "$log" "$log_dest"
+        rm -rf "$log"
 
         echo "merciful bliss ..."
         exit "$code"
@@ -151,7 +150,7 @@ set -uo pipefail
             --argjson elapsed_seconds "${elapsed_seconds:-0}" \
             --arg updated "$(date)" \
             --argjson updated_epoch "$now" \
-            --arg rip_log "$(cat $LOG)" \
+            --arg rip_log "$(cat $log)" \
             '{
                 start: ($start | todate),
                 start_epoch: $start,
@@ -180,8 +179,7 @@ set -uo pipefail
         local total=0 now f data phase upd t c remain
         now=$(date +%s)
         # Glob sibling status files: same base/ext as $STATUS, any tag.
-        local pattern="${STATUS_TMP%.*}.*.${STATUS_TMP##*.}"
-        for f in $pattern; do
+        for f in $STATUS_TMP; do
             [[ -e "$f" ]] || continue
             [[ "$f" == "$STATUS" ]] && continue   # skip our own
             # Single jq call extracts all needed fields as tab-separated values.
@@ -208,7 +206,7 @@ set -uo pipefail
     sibling_in_starting() {
         local now f data phase upd
         now=$(date +%s)
-        local pattern="${STATUS_TMP%.*}.*.${STATUS_TMP##*.}"
+        local pattern="${STATUS%.*}.*.${STATUS##*.}"
         for f in $pattern; do
             [[ -e "$f" ]] || continue
             [[ "$f" == "$STATUS" ]] && continue
@@ -224,27 +222,33 @@ set -uo pipefail
 
 # === Initialization ===
     START=$(date +%s)
-    LOG="/tmp/rip.$$.log"
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    
+    STAGING="${1:-}"
+    PERMANENT="${2:-}"
+    STATUS_TMP="${3:-}"
+    LOG_TMP="${4:-}"
+    NTFY_URL="${5:-}"
+    DRIVE_NUM="${6:-}"
+    MEDIA="${7:-}"
+    SEASON="${8:-}"
 
-    RAW_TITLE=""
-    TITLE=""
-    BATCH_DIR=""
-    PERM_DIR=""
-    DEST_REL=""
-    RIPPING=""
-    STAGING=""
-    PERMANENT=""
-    STATUS=""
-    SEL_TRACKS=""
+    DEVICE="/dev/sr$DRIVE_NUM"
+    DRIVE_TAG="$(basename "$DEVICE")".
+    STATUS="${STATUS_TMP/\*/$DRIVE_TAG}"
+    LOG="${LOG_TMP/\*/$DRIVE_TAG}"
+    RIPPING="$STAGING/.ripping"
 
     WAIT_POLL_SECS=10
     WAIT_MAX_SECS=5400
     RESERVE_STALE_SECS=120
 
-    DEVICE=""
-    DRIVE_TAG="unknown"
+    DEST_REL=""
+    RAW_TITLE=""
+    TITLE=""
+    BATCH_DIR=""
+    PERM_DIR=""
     MKV_INDEX=""
+    SEL_TRACKS=""
 
     declare -a STAGED_PATHS=()
 
@@ -252,29 +256,29 @@ set -uo pipefail
     track_select=false
 
     exec > >(ts '%Y-%m-%d %H:%M:%S' | tee -a "$LOG") 2>&1
-    echo "Script repo version: $(git -C "$SCRIPT_DIR" rev-list --count HEAD)-$(git -C "$SCRIPT_DIR" rev-parse --short HEAD)"
     echo "Run PID: $$"
     echo "Command Received: $0 $*"
     echo "Start: $(date)"
 
-    curl -sd "Rip Request Received" ntfy.sh/saturn-rips
+    curl -sd "Rip Request Received" NTFY_URL
 
 
 # === Arg parsing and preflight ===
+    deps=(makemkvcon jq inotifywait)
+    for dep in "${deps[@]}"; do
+        if ! command -v "dep"; then
+            exit_handler "Missing required dependency: $dep" 1
+        fi
+    done
+    
     while getopts "Et" opt; do
         case $opt in
             E) eject_flag=true ;;
             t) track_select=true ;;
-            *) echo "[?] Invalid option: -$OPTARG"; exit 1 ;;
+            *) exit_handler "[?] Invalid option: -$OPTARG" 1 ;;
         esac
     done
     shift $((OPTIND - 1))
-
-    DRIVE_NUM="${1:-}"
-    TYPE="${2:-}"
-    SEASON="${3:-}"
-
-    USAGE="Usage: $0 [-E] [-t] <drive#> <movie|show> [season_number]"
 
     if [[ -z "$DRIVE_NUM" ]]; then
         echo "Missing drive number. $USAGE"; exit 1
@@ -282,20 +286,6 @@ set -uo pipefail
     if [[ ! "$DRIVE_NUM" =~ ^[0-9]+$ ]]; then
         echo "Drive number must be a non-negative integer (got '$DRIVE_NUM'). $USAGE"; exit 1
     fi
-    DEVICE="/dev/sr$DRIVE_NUM"
-    DRIVE_TAG="$(basename "$DEVICE")"
-
-    CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/ripper/env.sh"
-    if [[ ! -f "$CONFIG_FILE" ]]; then echo "Could not find config file: $CONFIG_FILE"; exit 1; fi
-    # shellcheck source=/home/saturn-svc/.config/ripper/env.sh
-    # shellcheck disable=SC1091
-    source "$CONFIG_FILE"
-    echo "$CONFIG_FILE loaded."
-
-    RIPPING="$RIPPING_DIR"
-    STAGING="$FILE_STAGING"
-    PERMANENT="$MEDIA_STORAGE"
-    STATUS="${STATUS_TMP%.*}.$DRIVE_TAG.${STATUS_TMP##*.}"
 
     echo "Drive: $DEVICE (tag: $DRIVE_TAG)"
     echo "Status file: $STATUS"
@@ -306,14 +296,14 @@ set -uo pipefail
 
     if [[ ! -b "$DEVICE" ]]; then exit_handler "Device '$DEVICE' is not a block device." 1; fi
 
-    if [[ -z "$TYPE" ]]; then exit_handler "Missing type. $USAGE" 1; fi
-    case "$TYPE" in
+    if [[ -z "$MEDIA" ]]; then exit_handler "Missing type." 1; fi
+    case "$MEDIA" in
         movie|show) ;;
         *) exit_handler "Argument must be 'movie' or 'show'." 1 ;;
     esac
 
-    if [[ "$TYPE" == "show" && -z "$SEASON" ]]; then exit_handler "Shows require a season number. $USAGE" 1; fi
-    if [[ "$TYPE" == "show" && ! "$SEASON" =~ ^[0-9]+$ ]]; then exit_handler "Season number must be an integer." 1; fi
+    if [[ "$MEDIA" == "show" && -z "$SEASON" ]]; then exit_handler "Shows require a season number." 1; fi
+    if [[ "$MEDIA" == "show" && ! "$SEASON" =~ ^[0-9]+$ ]]; then exit_handler "Season number must be an integer." 1; fi
 
     exec 200>"/var/lock/movie-ripper.$DRIVE_TAG.lock"
     if ! flock -n 200; then
@@ -326,7 +316,7 @@ set -uo pipefail
 
     if ! smart_result=$(sudo -n /root/scripts/smart_check.sh "$STAGING" 2>&1); then
         echo "WARNING: $smart_result"
-        curl -sd "[$DRIVE_TAG] WARN: SMART check on staging - $smart_result" ntfy.sh/saturn-rips
+        curl -sd "[$DRIVE_TAG] WARN: SMART check on staging - $smart_result" NTFY_URL
     else
         echo "SMART check: $smart_result"
     fi
@@ -344,12 +334,13 @@ set -uo pipefail
     fi
 
     sleep 5
-    if ! udevadm info --query=property --name="$DEVICE" | grep -q '^ID_FS_TYPE='; then
+    if ! udevadm info --query=property --name="$DEVICE" | grep -q '^ID_FS_MEDIA='; then
         exit_handler "Disc unreadable; no recognizable filesystem. Exiting ..." 3
     fi
 
 # === MakeMKV index resolution ===
     echo "Resolving MakeMKV disc index for $DEVICE ..."
+    write_status "Indexing ..."
     DRV_LIST=$(makemkvcon -r --cache=1 info disc:9999 2>/dev/null)
     MKV_INDEX=$(echo "$DRV_LIST" \
         | grep '^DRV:' \
@@ -364,6 +355,7 @@ set -uo pipefail
 
 # === Disc info and title parsing ===
     echo "Getting disc info ..."
+    write_status "Getting Disc Info ..."
     INFO_OUTPUT=$(makemkvcon -r info "disc:$MKV_INDEX")
     RAW_TITLE=$(echo "$INFO_OUTPUT" | awk -F',' -v idx="DRV:$MKV_INDEX" '$1 == idx {
         n = split($0, a, "\"");
@@ -378,14 +370,14 @@ set -uo pipefail
     if [[ -z "$TITLE" ]]; then exit_handler "Error parsing disc metadata!" 3; fi
     echo "General title: $TITLE"
 
-    case "$TYPE" in
+    case "$MEDIA" in
         movie) DEST_REL="Movies/$TITLE" ;;
         show)  DEST_REL="Shows/$TITLE/Season $SEASON" ;;
     esac
 
-    if [[ -d "$PERMANENT/$DEST_REL/Logs" ]]; then
-        if compgen -G "$PERMANENT/$DEST_REL/Logs/$RAW_TITLE*.rip.log" > /dev/null; then
-            echo "WARNING: Existing rip logs found for '$RAW_TITLE' in $PERMANENT/$DEST_REL/Logs"
+    if [[ -d "$PERMANENT/$DEST_REL/logs" ]]; then
+        if compgen -G "$PERMANENT/$DEST_REL/logs/$RAW_TITLE*.rip.log" > /dev/null; then
+            echo "WARNING: Existing rip logs found for '$RAW_TITLE' in $PERMANENT/$DEST_REL/LOGs"
         fi
     fi
 
@@ -447,14 +439,14 @@ set -uo pipefail
         printf '%s' "${OUT_MAP[$t]}"
     done
 
-    INFO_DEST="$PERMANENT/$DEST_REL/Logs/$RAW_TITLE.info"
+    INFO_DEST="$PERMANENT/$DEST_REL/logs/$RAW_TITLE.info"
     mkdir -p "$(dirname "$INFO_DEST")"
     if [[ -e "$INFO_DEST" ]]; then
         j=1
-        while [[ -e "$PERMANENT/$DEST_REL/Logs/$RAW_TITLE(${j}).info" ]]; do
+        while [[ -e "$PERMANENT/$DEST_REL/logs/$RAW_TITLE(${j}).info" ]]; do
             ((j++))
         done
-        INFO_DEST="$PERMANENT/$DEST_REL/Logs/$RAW_TITLE(${j}).info"
+        INFO_DEST="$PERMANENT/$DEST_REL/logs/$RAW_TITLE(${j}).info"
     fi
     {
         echo "=== Track Map ==="
@@ -510,11 +502,25 @@ set -uo pipefail
         SEL_TRACKS="${selected_tracks[*]}"
         echo "Selected tracks: ${selected_tracks[*]}"
     else
-        TOTAL_MB=0
-        SEL_TRACKS="all"
-        for t in "${!TITLE_BYTES[@]}"; do
-            TOTAL_MB=$(( TOTAL_MB + TITLE_BYTES[$t] / 1024 / 1024 ))
-        done
+        if [[ "$MEDIA" == "movie" ]]; then
+            max_bytes=
+            largest_track=
+            for k in "${!TITLE_BYTES[@]}"; do
+                v=${TITLE_BYTES[$k]}
+                if [[ -z "$max" || "$v" -gt "$max" ]]
+                    max_bytes=$v
+                    largest_track=$k
+                fi
+            done
+            TOTAL_MB=$(( max_bytes / 1024 / 1024 ))
+            SEL_TRACKS="$largest_track"
+        else
+            TOTAL_MB=0
+            SEL_TRACKS="all"
+            for t in "${!TITLE_BYTES[@]}"; do
+                TOTAL_MB=$(( TOTAL_MB + TITLE_BYTES[$t] / 1024 / 1024 ))
+            done
+        fi
     fi
     echo "Estimated rip size: $TOTAL_MB MB"
 
@@ -535,20 +541,20 @@ set -uo pipefail
     effective_avail=$(( DEST_AVAIL - reserved ))
     echo "Reserved by other live rips: $reserved MB | Effective available: $effective_avail MB | Need: $NEEDED MB"
 
-    wait2_waited=0
+    waited=0
     while (( effective_avail < NEEDED )); do
         largest=$(find "$STAGING/.review" -maxdepth 1 -type f -printf '%s\t%p\n' \
             | sort -rn | head -1 | cut -f2)
         if [[ -n "$largest" ]]; then
             rm -- "$largest"
             echo "Removing $largest to make space."
-            wait2_waited=0
+            waited=0
         elif (( DEST_AVAIL >= NEEDED )); then
-            (( wait2_waited >= WAIT_MAX_SECS )) && exit_handler "Timed out after ${WAIT_MAX_SECS}s waiting on reserved staging space (need $NEEDED MB, reserved $reserved MB)." 4
-            (( wait2_waited == 0 )) && echo "Staging blocked only by another rip's reservation ($reserved MB); waiting for it to finish ..."
+            (( waited >= WAIT_MAX_SECS )) && exit_handler "Timed out after ${WAIT_MAX_SECS}s waiting on reserved staging space (need $NEEDED MB, reserved $reserved MB)." 4
+            (( waited == 0 )) && echo "Staging blocked only by another rip's reservation ($reserved MB); waiting for it to finish ..."
             write_status "Waiting"
             sleep "$WAIT_POLL_SECS"
-            wait2_waited=$(( wait2_waited + WAIT_POLL_SECS ))
+            waited=$(( waited + WAIT_POLL_SECS ))
         else
             exit_handler "Insufficient staging capacity: need ~$NEEDED MB, raw available $DEST_AVAIL MB (reserved $reserved MB)." 4
         fi
@@ -562,7 +568,7 @@ set -uo pipefail
 
     CURRENT_RIP_MB=0
     if $track_select; then
-        curl -sd "[$DRIVE_TAG] Ripping ${#selected_tracks[@]} tracks: $TITLE -> $BATCH_DIR" ntfy.sh/saturn-rips
+        curl -sd "[$DRIVE_TAG] Ripping ${#selected_tracks[@]} tracks: $TITLE -> $BATCH_DIR" NTFY_URL
         (
             trap 'kill -TERM "${child:-}" 2>/dev/null; exit 130' TERM INT
             for t in "${selected_tracks[@]}"; do
@@ -577,9 +583,8 @@ set -uo pipefail
         MKV_PID=$!
         echo "Driver PID: $MKV_PID"
     else
-
-        curl -sd "[$DRIVE_TAG] Ripping: $TITLE -> $BATCH_DIR" ntfy.sh/saturn-rips
-        makemkvcon mkv "disc:$MKV_INDEX" all "$BATCH_DIR" &
+        curl -sd "[$DRIVE_TAG] Ripping: $TITLE -> $BATCH_DIR" NTFY_URL
+        makemkvcon mkv "disc:$MKV_INDEX" "$SEL_TRACKS" "$BATCH_DIR" &
         MKV_PID=$!
         echo "MakeMKV PID: $MKV_PID"
     fi
@@ -655,7 +660,7 @@ set -uo pipefail
 
     if [[ ${#sorted_files[@]} -eq 0 ]]; then exit_handler "No mkv files found in batch directory." 6; fi
 
-    if [[ "$TYPE" == "show" ]]; then
+    if [[ "$MEDIA" == "show" ]]; then
         mkdir -p "$STAGE_DIR/Extras"
 
         all_sizes=()

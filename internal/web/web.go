@@ -12,9 +12,9 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
-	"strings"
+	"time"
 
-	"ripper/internal/preflight"
+	"ripper/internal/prflt"
 )
 
 type Status struct {
@@ -47,17 +47,9 @@ var (
 	statusGlob    string
 )
 
-func perDriveGlob(base string) string {
-	ext := filepath.Ext(base)
-	stem := strings.TrimSuffix(base, ext)
-	return stem + ".*" + ext
-}
-
 func OpenStatusFile() {
-	statusTmpPath = preflight.MasterConfig.RipConfig.StatusTmp
-	statusFile = filepath.Base(statusTmpPath)
-	statusGlob = perDriveGlob(statusFile)
-
+	statusTmpPath = prflt.MasterConfig.RipConfig.StatusTmp
+	statusGlob = filepath.Base(statusTmpPath)
 	dir := filepath.Dir(statusTmpPath)
 
 	var err error
@@ -213,4 +205,21 @@ func (s *Status) ElapsedHMS() string {
 	m := (sec % 3600) / 60
 	ss := sec % 60
 	return fmt.Sprintf("%d:%02d:%02d", h, m, ss)
+}
+
+func Serve() {
+	OpenStatusFile()
+
+	http.HandleFunc("GET /{$}", StatusHandler)
+	http.HandleFunc("GET /json", JsonHandler)
+	http.HandleFunc("GET /logs/{drv}", LogHandler)
+
+	srv := &http.Server{
+		Addr:         ":9511",
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	log.Fatal(srv.ListenAndServe())
 }

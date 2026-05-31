@@ -1,28 +1,16 @@
 package main
 
 import (
-	"log"
-	"net/http"
-	"time"
+	"os"
 
-	"ripper/internal/preflight"
-	"ripper/internal/web"
+	"ripper/cmd"
+	"ripper/internal/prflt"
 )
 
 func main() {
-	preflight.Init()
-	web.OpenStatusFile()
+	prflt.Init()
 
-	http.HandleFunc("GET /{$}", web.StatusHandler)
-	http.HandleFunc("GET /json", web.JsonHandler)
-	http.HandleFunc("GET /logs/{drv}", web.LogHandler)
-
-	srv := &http.Server{
-		Addr:         ":9511",
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  60 * time.Second,
+	if err := cmd.Execute(); err != nil {
+		os.Exit(1)
 	}
-
-	log.Fatal(srv.ListenAndServe())
 }

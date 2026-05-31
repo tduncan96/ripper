@@ -1,4 +1,4 @@
-package preflight
+package prflt
 
 import (
 	"fmt"
@@ -14,16 +14,18 @@ type Config struct {
 		ScriptDir string
 	}
 	RipConfig struct {
-		StagingDir string
-		PermDir    string
+		Staging string
+		Permanent    string
 		StatusTmp  string
 		LogTmp     string
+		NtfyURL    string
 	}
 	LibrarianConfig struct {
 		BookURL     string
 		BookPageID  string
 		BookTokenID string
 		BookKey     string
+		JellyURL string
 		JellyKey    string
 	}
 }
@@ -34,17 +36,20 @@ var scriptFilePath string = "/usr/local/libexec"
 
 func (c Config) validate() (ripError, librError error) {
 	var ripMissing []string
-	if c.RipConfig.PermDir == "" {
-		ripMissing = append(ripMissing, "PERM_DIR")
+	if c.RipConfig.Staging == "" {
+		ripMissing = append(ripMissing, "STAGING")
 	}
-	if c.RipConfig.StagingDir == "" {
-		ripMissing = append(ripMissing, "STAGING_DIR")
+	if c.RipConfig.Permanent == "" {
+		ripMissing = append(ripMissing, "PERMANENT")
 	}
 	if c.RipConfig.StatusTmp == "" {
 		ripMissing = append(ripMissing, "STATUS_TMP")
 	}
 	if c.RipConfig.LogTmp == "" {
 		ripMissing = append(ripMissing, "LOG_TMP")
+	}
+	if c.RipConfig.NtfyURL == "" {
+		ripMissing = append(ripMissing, "NTFY_URL")
 	}
 
 	if len(ripMissing) > 0 {
@@ -66,6 +71,9 @@ func (c Config) validate() (ripError, librError error) {
 	if c.LibrarianConfig.BookTokenID == "" {
 		librMissing = append(librMissing, "BOOKSTACK_TOKEN_ID")
 	}
+	if c.LibrarianConfig.JellyURL == "" {
+		librMissing = append(librMissing, "JELLYFIN_URL")
+	}	
 	if c.LibrarianConfig.JellyKey == "" {
 		librMissing = append(librMissing, "JELLYFIN_API_KEY")
 	}
@@ -106,15 +114,17 @@ func ReadConfigFiles() (ripErr, librErr, error error) {
 			return nil, nil, err
 		}
 		if file.Name() == "rip.env" {
-			MasterConfig.RipConfig.PermDir = vars["PERM_DIR"]
-			MasterConfig.RipConfig.StagingDir = vars["STAGING_DIR"]
+			MasterConfig.RipConfig.Staging = vars["STAGING"]
+			MasterConfig.RipConfig.Permanent = vars["PERMANENT"]
 			MasterConfig.RipConfig.StatusTmp = vars["STATUS_TMP"]
 			MasterConfig.RipConfig.LogTmp = vars["LOG_TMP"]
+			MasterConfig.RipConfig.NtfyURL = vars["NTFY_URL"]
 		} else if file.Name() == "libr.env" {
 			MasterConfig.LibrarianConfig.BookURL = vars["BOOKSTACK_URL"]
 			MasterConfig.LibrarianConfig.BookPageID = vars["BOOKSTACK_PAGE_ID"]
 			MasterConfig.LibrarianConfig.BookTokenID = vars["BOOKSTACK_TOKEN_ID"]
 			MasterConfig.LibrarianConfig.BookKey = vars["BOOKSTACK_API_KEY"]
+			MasterConfig.LibrarianConfig.JellyURL = vars["JELLYFIN_URL"]
 			MasterConfig.LibrarianConfig.JellyKey = vars["JELLYFIN_API_KEY"]
 		}
 	}

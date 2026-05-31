@@ -6,7 +6,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "ripper",
-	Short: "MakeMKV wrapper",
+	Short: "Media ripper and monitor wrapper",
 	Run:   func(cmd *cobra.Command, args []string) { cmd.Help() },
 }
 

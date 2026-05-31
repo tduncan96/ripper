@@ -1,4 +1,4 @@
-package preflight
+package prflt
 
 type Gate struct {
 	RipConfig  error
