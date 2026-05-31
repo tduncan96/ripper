@@ -250,7 +250,7 @@ set -uo pipefail
 
 # === Preflight ===
     write_status "Starting"
-    trap on_signal INT TERM
+    trap on_signal INT TERM HUP QUIT
 
     if [[ ! -b "$DEVICE" ]]; then exit_handler "Device '$DEVICE' is not a block device." 1; fi
 
