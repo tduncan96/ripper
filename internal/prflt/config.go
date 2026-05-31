@@ -14,18 +14,18 @@ type Config struct {
 		ScriptDir string
 	}
 	RipConfig struct {
-		Staging string
-		Permanent    string
-		StatusTmp  string
-		LogTmp     string
-		NtfyURL    string
+		Staging   string
+		Permanent string
+		StatusTmp string
+		LogTmp    string
+		NtfyURL   string
 	}
 	LibrarianConfig struct {
 		BookURL     string
 		BookPageID  string
 		BookTokenID string
 		BookKey     string
-		JellyURL string
+		JellyURL    string
 		JellyKey    string
 	}
 }
@@ -73,7 +73,7 @@ func (c Config) validate() (ripError, librError error) {
 	}
 	if c.LibrarianConfig.JellyURL == "" {
 		librMissing = append(librMissing, "JELLYFIN_URL")
-	}	
+	}
 	if c.LibrarianConfig.JellyKey == "" {
 		librMissing = append(librMissing, "JELLYFIN_API_KEY")
 	}
