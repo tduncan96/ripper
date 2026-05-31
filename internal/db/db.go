@@ -49,7 +49,7 @@ func Close(db *sql.DB) {
 
 func (r *Record) CreateRecord() (int64, error) {
 	result, err := RipRecordDB.Exec(
-		`INSERT INTO runs (StartTime, EndTime, ExitCode, Device, Title, RawTitle, Destination, TotalRipMB, TotalMvMb, RipLog)
+		`INSERT INTO Runs (StartTime, EndTime, ExitCode, Device, Title, RawTitle, Destination, TotalRipMB, TotalMvMb, RipLog)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.StartTime,
 		r.EndTime,
