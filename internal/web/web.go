@@ -148,7 +148,7 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 //go:embed templates/*.gohtml
 var templateFS embed.FS
 var statusTmpl = template.Must(template.ParseFS(templateFS, "templates/status_page.gohtml"))
-var recordsTmpl = template.Must(template.ParseFS(templateFS, "records_page.gohtml"))
+var recordsTmpl = template.Must(template.ParseFS(templateFS, "templates/records_page.gohtml"))
 
 func StatusHandler(w http.ResponseWriter, r *http.Request) {
 	statuses, err := getStatuses()
