@@ -61,7 +61,7 @@ set -uo pipefail
         write_status "$phase"
         
         echo "Creating record ..."
-        /usr/local/bin/ripper record # Internal cobra command -> ripper/cmd/dbcmd.go
+        ripper record "$DRIVE_TAG" # Internal cobra command -> ripper/cmd/dbcmd.go
 
         echo "merciful bliss ..."
         exit "$EXIT_CODE"
