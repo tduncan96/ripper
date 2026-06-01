@@ -35,7 +35,7 @@ var MasterConfig Config
 var configFilePath string = "/etc/ripper/env"
 var scriptFilePath string = "/usr/local/libexec"
 
-func (c Config) validate() (ripError, librError error) {
+func (c *Config) validate() (ripError, librError error) {
 	var ripMissing []string
 	if c.RipConfig.Permanent == "" {
 		ripMissing = append(ripMissing, "PERMANENT")
@@ -60,7 +60,7 @@ func (c Config) validate() (ripError, librError error) {
 	}
 
 	if len(ripMissing) > 0 {
-		ripError = fmt.Errorf("Missing required configs from rip.env: %s", strings.Join(ripMissing, ", "))
+		ripError = fmt.Errorf("missing required configs from rip.env: %s", strings.Join(ripMissing, ", "))
 	} else {
 		ripError = nil
 	}
@@ -86,7 +86,7 @@ func (c Config) validate() (ripError, librError error) {
 	}
 
 	if len(librMissing) > 0 {
-		librError = fmt.Errorf("Missing required configs from libr.env: %s", strings.Join(librMissing, ", "))
+		librError = fmt.Errorf("missing required configs from libr.env: %s", strings.Join(librMissing, ", "))
 	} else {
 		librError = nil
 	}
@@ -116,18 +116,25 @@ func ReadConfigFiles() (ripErr, librErr, error error) {
 	}
 
 	for _, file := range configList {
-		vars, err := godotenv.Read(configFilePath + file.Name())
+		f, err := root.Open(file.Name())
 		if err != nil {
 			return nil, nil, err
 		}
-		if file.Name() == "rip.env" {
-			MasterConfig.RipConfig.Permanent = vars["PERMANENT"]  // /mnt/14tb_sata_1/media
-			MasterConfig.RipConfig.Staging = vars["STAGING"]      // /mnt/staging
-			MasterConfig.RipConfig.StatusTmp = vars["STATUS_TMP"] // /tmp/*.rip-status.json
-			MasterConfig.RipConfig.LogTmp = vars["LOG_TMP"]       // /tmp/*.rip.log
+		vars, err := godotenv.Parse(f)
+		f.Close()
+		if err != nil {
+			return nil, nil, err
+		}
+
+		switch file.Name() {
+		case "rip.env":
+			MasterConfig.RipConfig.Permanent = vars["PERMANENT"]
+			MasterConfig.RipConfig.Staging = vars["STAGING"]
+			MasterConfig.RipConfig.StatusTmp = vars["STATUS_TMP"]
+			MasterConfig.RipConfig.LogTmp = vars["LOG_TMP"]
 			MasterConfig.RipConfig.NtfyURL = vars["NTFY_URL"]
-			MasterConfig.RipConfig.RipDBDir = vars["RIP_DB_DIR"] // /opt/ripper
-		} else if file.Name() == "libr.env" {
+			MasterConfig.RipConfig.RipDBDir = vars["RIP_DB_DIR"]
+		case "libr.env":
 			MasterConfig.LibrarianConfig.JellyURL = vars["JELLYFIN_URL"]
 			MasterConfig.LibrarianConfig.JellyKey = vars["JELLYFIN_API_KEY"]
 			MasterConfig.LibrarianConfig.BookURL = vars["BOOKSTACK_URL"]

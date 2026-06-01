@@ -1,20 +1,24 @@
 package main
 
 import (
-	"os"
 	"fmt"
+	"os"
 
 	"ripper/cmd"
-	"ripper/internal/prflt"
 	"ripper/internal/db"
+	"ripper/internal/prflt"
 )
 
 func main() {
-	prflt.Init()
-	
+	err := prflt.Init()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "preflight initialization error: %s.\n Exiting ...", err)
+		os.Exit(1)
+	}
+
 	database, err := db.Init(prflt.MasterConfig.RipConfig.RipDBDir)
 	if err != nil {
-		fmt.Print("Database initialization error. Exiting ...")
+		fmt.Fprintf(os.Stderr, "database initialization error: %s.\n Exiting ...", err)
 		os.Exit(1)
 	}
 	defer db.Close(database)

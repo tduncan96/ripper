@@ -208,7 +208,7 @@ set -uo pipefail
     eject_flag=false
     track_select=false
 
-    deps=(makemkvcon jq inotifywait file clamdscan rsync tree eject curl ts flock lsof sudo)
+    deps=(makemkvcon jq file clamdscan rsync tree eject curl ts flock lsof sudo)
     for dep in "${deps[@]}"; do
         if ! command -v "$dep"; then
             exit_handler "Missing required dependency: $dep" 1

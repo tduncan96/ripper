@@ -15,6 +15,8 @@ var createDbRecordCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		drv := args[0]
+
+		web.OpenStatusFile()
 		status, err := web.GetStatus(drv)
 		if err != nil {
 			return err

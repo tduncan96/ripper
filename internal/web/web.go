@@ -49,7 +49,7 @@ var (
 	statusGlob    string
 )
 
-func OpenStatusFile() {
+func OpenStatusFile() error {
 	statusTmpPath = prflt.MasterConfig.RipConfig.StatusTmp
 	statusGlob = filepath.Base(statusTmpPath)
 	dir := filepath.Dir(statusTmpPath)
@@ -57,8 +57,10 @@ func OpenStatusFile() {
 	var err error
 	statusRoot, err = os.OpenRoot(dir)
 	if err != nil {
-		log.Fatalf("opening status root %q: %v", dir, err)
+		return err
 	}
+
+	return nil
 }
 
 func getStatuses() ([]Status, error) {
@@ -86,7 +88,7 @@ func getStatuses() ([]Status, error) {
 }
 
 func GetStatus(drv string) (s Status, err error) {
-	file := strings.ReplaceAll(statusTmpPath, "*", drv)
+	file := strings.ReplaceAll(statusGlob, "*", drv)
 	data, err := fs.ReadFile(statusRoot.FS(), file)
 	if err != nil {
 		return Status{}, err
@@ -222,7 +224,10 @@ func (s *Status) ElapsedHMS() string {
 }
 
 func Serve() {
-	OpenStatusFile()
+	err := OpenStatusFile()
+	if err != nil {
+		log.Fatalf("Error opening status root: %v", err)
+	}
 
 	http.HandleFunc("GET /{$}", StatusHandler)
 	http.HandleFunc("GET /json", JsonHandler)

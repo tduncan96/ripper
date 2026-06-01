@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -28,6 +27,9 @@ var ripCommand = &cobra.Command{
 			return fmt.Errorf("drive must be a number, got %q", drvNum)
 		}
 		media := args[1]
+		if media != "movie" && media != "show" {
+			return fmt.Errorf("media type must be 'movie' or 'show', got %q", media)
+		}
 		season := ""
 		if len(args) == 3 {
 			season = args[2]
@@ -35,6 +37,7 @@ var ripCommand = &cobra.Command{
 				return fmt.Errorf("season must be a number, got %q", season)
 			}
 		}
+
 		ripConfig := prflt.MasterConfig.RipConfig
 
 		staging := ripConfig.Staging
@@ -55,10 +58,8 @@ var ripCommand = &cobra.Command{
 			season,        // 8
 		)
 
-		var stderr bytes.Buffer
-		c.Stderr = &stderr
 		if err := c.Start(); err != nil {
-			return fmt.Errorf("rip failed during initialization: %w: %s", err, stderr.String())
+			return fmt.Errorf("rip failed during initialization: %w", err)
 		}
 		return nil
 	},
@@ -88,10 +89,8 @@ var librarianCommand = &cobra.Command{
 			prflt.MasterConfig.RipConfig.Permanent, // 7
 		)
 
-		var stderr bytes.Buffer
-		c.Stderr = &stderr
 		if err := c.Run(); err != nil {
-			return fmt.Errorf("media cataloging failed during initialization: %w: %s", err, stderr.String())
+			return fmt.Errorf("media cataloging failed during initialization: %w", err)
 		}
 		return nil
 	},

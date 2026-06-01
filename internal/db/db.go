@@ -2,8 +2,10 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
 	_ "embed"
+	"fmt"
+
+	_ "modernc.org/sqlite"
 )
 
 type Record struct {
@@ -63,12 +65,12 @@ func (r *Record) CreateRecord() (int64, error) {
 		r.RipLog,
 	)
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
 
 	r.RunID = int(id)
@@ -113,18 +115,18 @@ func GetAllRecords() ([]Record, error) {
 
 func GetRecord(id int64) (Record, error) {
 	var record Record
-	err := RipRecordDB.QueryRow("SELECT * FROM Runs WHERE RunID = ?").Scan(
-			&record.RunID,
-			&record.StartTime,
-			&record.EndTime,
-			&record.ExitCode,
-			&record.Device,
-			&record.Title,
-			&record.RawTitle,
-			&record.Destination,
-			&record.TotalRipMB,
-			&record.TotalMvMB,
-			&record.RipLog,
+	err := RipRecordDB.QueryRow("SELECT * FROM Runs WHERE RunID = ?", id).Scan(
+		&record.RunID,
+		&record.StartTime,
+		&record.EndTime,
+		&record.ExitCode,
+		&record.Device,
+		&record.Title,
+		&record.RawTitle,
+		&record.Destination,
+		&record.TotalRipMB,
+		&record.TotalMvMB,
+		&record.RipLog,
 	)
 	if err != nil {
 		return Record{}, err
