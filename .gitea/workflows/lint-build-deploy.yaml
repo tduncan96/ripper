@@ -58,7 +58,7 @@ jobs:
           printf '%s\n' "$SATURN_SVC_SSH_KEY" | ssh-add -
           scp -o StrictHostKeyChecking=no ripper saturn-svc@192.168.0.99:/tmp/ripper
           scp -o StrictHostKeyChecking=no \
-            scripts/media-ripper.sh scripts/media-librarian.sh deploy/ripper.service \
+            scripts/media-ripper.sh scripts/media-librarian.sh systemd/ripper.service \
             saturn-svc@192.168.0.99:/tmp/
           ssh -o StrictHostKeyChecking=no saturn-svc@192.168.0.99 '
             sudo -n install -d /usr/local/libexec &&
