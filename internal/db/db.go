@@ -35,8 +35,17 @@ func Init(path string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	db.Exec("PRAGMA journal_mode=WAL;")
-	db.Exec("PRAGMA foreign_keys=ON;")
+	result, err := db.Exec("PRAGMA journal_mode=WAL;")
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("db.Exec success: %s", result)
+
+	result, err = db.Exec("PRAGMA foreign_keys=ON;")
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("db.Exec success: %s", result)
 
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err

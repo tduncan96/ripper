@@ -120,12 +120,17 @@ func ReadConfigFiles() (ripErr, librErr, error error) {
 		if err != nil {
 			return nil, nil, err
 		}
+		
 		vars, err := godotenv.Parse(f)
-		f.Close()
 		if err != nil {
 			return nil, nil, err
 		}
-
+		
+		err = f.Close()
+		if err != nil {
+			return nil, nil, err
+		}
+		
 		switch file.Name() {
 		case "rip.env":
 			MasterConfig.RipConfig.Permanent = vars["PERMANENT"]

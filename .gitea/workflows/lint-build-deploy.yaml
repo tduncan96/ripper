@@ -61,11 +61,11 @@ jobs:
             scripts/media-ripper.sh scripts/media-librarian.sh deploy/ripper.service \
             saturn-svc@192.168.0.99:/tmp/
           ssh -o StrictHostKeyChecking=no saturn-svc@192.168.0.99 '
-            sudo install -d /usr/local/libexec &&
-            sudo install -m 0755 /tmp/media-ripper.sh /usr/local/libexec/media-ripper.sh &&
-            sudo install -m 0755 /tmp/media-librarian.sh /usr/local/libexec/media-librarian.sh &&
-            sudo install -m 0755 /tmp/ripper /usr/local/bin/ripper &&
-            sudo install -m 0644 /tmp/ripper.service /etc/systemd/system/ripper.service &&
+            sudo -n install -d /usr/local/libexec &&
+            sudo -n install -m 0755 /tmp/media-ripper.sh /usr/local/libexec/media-ripper.sh &&
+            sudo -n install -m 0755 /tmp/media-librarian.sh /usr/local/libexec/media-librarian.sh &&
+            sudo -n install -m 0755 /tmp/ripper /usr/local/bin/ripper &&
+            sudo -n install -m 0644 /tmp/ripper.service /etc/systemd/system/ripper.service &&
             sudo systemctl daemon-reload &&
             sudo systemctl enable ripper &&
             sudo systemctl restart ripper &&
