@@ -2,20 +2,22 @@ name: Build and Deploy ripper
 
 on:
   push:
-    branches: [main]
+  pull_request:
 
 jobs:
-  build-deploy:
+  checks:
     runs-on: ubuntu-latest
     container: golang:1.26-alpine
     steps:
       - name: Install deps
-        run: apk add --no-cache git openssh-client shellcheck
+        run: apk add --no-cache git shellcheck
 
       - name: Clone repo
-        run: git -c http.sslVerify=false clone http://192.168.0.99:3000/tduncan/ripper.git .
+        run: |
+          git -c http.sslVerify=false clone http://192.168.0.99:3000/tduncan/ripper.git .
+          git checkout "$GITHUB_SHA"
 
-      - name: Code quality and security checks
+      - name: Go linting and security checks
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@latest
           go install github.com/securego/gosec/v2/cmd/gosec@latest
@@ -26,13 +28,22 @@ jobs:
           gosec ./...
           govulncheck ./...
 
-          changed=$(git diff --name-only ${{ github.event.before }} HEAD -- '*.sh')
-          echo "$changed"
-          if [ -z "$changed" ]; then
-            echo "No changes to shell scripts, skipping."
-            exit 0
-          fi
-          echo "$changed" | xargs shellcheck
+      - name: Shellcheck scripts
+        run: git ls-files '*.sh' | xargs -r shellcheck
+
+  deploy:
+    needs: checks
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    container: golang:1.26-alpine
+    steps:
+      - name: Install deps
+        run: apk add --no-cache git openssh-client
+
+      - name: Clone repo
+        run: |
+          git -c http.sslVerify=false clone http://192.168.0.99:3000/tduncan/ripper.git .
+          git checkout "$GITHUB_SHA"
 
       - name: Build
         run: |
@@ -45,12 +56,14 @@ jobs:
         run: |
           eval "$(ssh-agent -s)"
           printf '%s\n' "$SATURN_SVC_SSH_KEY" | ssh-add -
-          scp -o StrictHostKeyChecking=no ripper saturn-svc@192.168.0.99:/tmp/ripper.new
-          scp -o StrictHostKeyChecking=no scripts/media-ripper.sh scripts/media-librarian.sh \
+          scp -o StrictHostKeyChecking=no ripper saturn-svc@192.168.0.99:/tmp/ripper
+          scp -o StrictHostKeyChecking=no \
+            scripts/media-ripper.sh scripts/media-librarian.sh deploy/ripper.service \
             saturn-svc@192.168.0.99:/tmp/
           ssh -o StrictHostKeyChecking=no saturn-svc@192.168.0.99 '
+            sudo install -d /usr/local/libexec &&
             sudo install -m 0755 /tmp/media-ripper.sh /usr/local/libexec/media-ripper.sh &&
-            sudo install -m 0755 /tmp/media-librarian.sh /usr/local/libexec/media-librarian.sh
+            sudo install -m 0755 /tmp/media-librarian.sh /usr/local/libexec/media-librarian.sh &&
             sudo install -m 0755 /tmp/ripper /usr/local/bin/ripper &&
             sudo install -m 0644 /tmp/ripper.service /etc/systemd/system/ripper.service &&
             sudo systemctl daemon-reload &&
