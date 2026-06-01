@@ -45,7 +45,6 @@ type Status struct {
 var (
 	statusRoot    *os.Root
 	statusTmpPath string
-	statusFile    string
 	statusGlob    string
 )
 
