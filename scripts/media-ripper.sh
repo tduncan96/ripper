@@ -15,7 +15,7 @@ set -uo pipefail
         # 6 -> File indexing error
 
         if (( EXIT_CODE == 0 )); then
-            phase="Complete"
+            phase="Complete!"
         else
             phase="Failed [$EXIT_CODE]"
         fi
@@ -104,11 +104,22 @@ set -uo pipefail
         now=$(date +%s)
         elapsed_seconds=$((now - START))
 
-        if [[ "$phase" == "Ripping ..." ]]; then
-            full_dest="$BATCH_DIR"
-        else
-            full_dest="$PERM_DIR"
-        fi
+        case "$phase" in 
+            "Starting ...")
+                full_dest="$STAGING" ;;
+            "Ripping ...")
+                full_dest="$BATCH_DIR" ;;
+            "Waiting ...")
+                full_dest="$BATCH_DIR" ;;
+            "Scanning ...")
+                full_dest="$STAGE_DIR" ;;
+            "Moving ...")
+                full_dest="$PERM_DIR" ;;
+            "Complete!")
+                full_dest="$PERM_DIR" ;;
+            *)
+                full_dest="$PERMANENT" ;;
+        esac
 
         jq -n \
             --argjson start "$START" \
@@ -252,7 +263,7 @@ set -uo pipefail
 
 
 # === Preflight ===
-    write_status "Starting"
+    write_status "Starting ..."
     trap on_signal INT TERM HUP QUIT
 
     if [[ ! -b "$DEVICE" ]]; then exit_handler "Device '$DEVICE' is not a block device." 1; fi
@@ -299,7 +310,7 @@ set -uo pipefail
 
 # === MakeMKV index resolution ===
     echo "Resolving MakeMKV disc index for $DEVICE ..."
-    write_status "Indexing ..."
+    write_status "Starting ..."
     DRV_LIST=$(makemkvcon -r --cache=1 info disc:9999 2>/dev/null)
     MKV_INDEX=$(echo "$DRV_LIST" \
         | grep '^DRV:' \
@@ -314,7 +325,7 @@ set -uo pipefail
 
 # === Disc info, title parsing, and directory setting ===
     echo "Getting disc info ..."
-    write_status "Getting Disc Info ..."
+    write_status "Starting ..."
     INFO_OUTPUT=$(makemkvcon -r info "disc:$MKV_INDEX")
     RAW_TITLE=$(echo "$INFO_OUTPUT" | awk -F',' -v idx="DRV:$MKV_INDEX" '$1 == idx {
         n = split($0, a, "\"");
@@ -486,7 +497,7 @@ set -uo pipefail
 
     if sibling_in_starting; then
         echo "Another drive is in Starting; waiting for it to begin ripping ..."
-        write_status "Waiting"
+        write_status "Waiting ..."
         waited=0
         while sibling_in_starting; do
             (( waited >= WAIT_MAX_SECS )) && exit_handler "Timed out after ${WAIT_MAX_SECS}s waiting for another drive to leave Starting." 4
@@ -512,7 +523,7 @@ set -uo pipefail
         elif (( DEST_AVAIL >= NEEDED )); then
             (( waited >= WAIT_MAX_SECS )) && exit_handler "Timed out after ${WAIT_MAX_SECS}s waiting on reserved staging space (need $NEEDED MB, reserved $reserved MB)." 4
             (( waited == 0 )) && echo "Staging blocked only by another rip's reservation ($reserved MB); waiting for it to finish ..."
-            write_status "Waiting"
+            write_status "Waiting ..."
             sleep "$WAIT_POLL_SECS"
             waited=$(( waited + WAIT_POLL_SECS ))
         else
@@ -779,7 +790,7 @@ set -uo pipefail
         CURRENT_MV_MB=$(( $(safe_du "$PERM_DIR") - PERM_BASE ))
         (( CURRENT_MV_MB < 0 )) && CURRENT_MV_MB=0
         (( CURRENT_MV_MB > STAGE_TOTAL )) && CURRENT_MV_MB=$STAGE_TOTAL
-        write_status "Moving"
+        write_status "Moving ..."
         sleep 1
     done
     wait "$rsync_pid"; rc=$?
