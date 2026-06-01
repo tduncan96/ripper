@@ -245,7 +245,11 @@ set -uo pipefail
     SEASON="${8:-}"
 
     DRIVE_TAG="sr$DRIVE_NUM"
+    echo "$DRIVE_TAG"
+
     DEVICE="/dev/$DRIVE_TAG"
+    echo "$DEVICE"
+    
     STATUS="${STATUS_TMP/\*/$DRIVE_TAG}"
     LOG="${LOG_TMP/\*/$DRIVE_TAG}"
 
