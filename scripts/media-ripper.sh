@@ -141,7 +141,7 @@ set -uo pipefail
             --arg updated "$(date)" \
             --argjson updated_epoch "$now" \
             --arg rip_log "$(cat "$LOG")" \
-            --argjson exit "${EXIT_CODE:-0}" \
+            --argjson exit_code "${EXIT_CODE:-0}" \
             '{
                 start: ($start | todate),
                 start_epoch: $start,
