@@ -36,6 +36,11 @@ set -uo pipefail
         seconds=$((elapsed%60))
         echo "End: $(date)"
         echo "Total Runtime: $minutes:$seconds"
+        
+        write_status "$phase"
+
+        echo "Creating record ..."
+        ripper record "$DRIVE_TAG" # Internal cobra command -> ripper/cmd/dbcmd.go
 
         local log_dest
         if [[ -n "$DEST_REL" ]]; then
@@ -57,11 +62,6 @@ set -uo pipefail
         fi
         echo "Exporting log to $log_dest ..."
         cp "$LOG" "$log_dest"
-
-        write_status "$phase"
-        
-        echo "Creating record ..."
-        ripper record "$DRIVE_TAG" # Internal cobra command -> ripper/cmd/dbcmd.go
 
         echo "merciful bliss ..."
         exit "$EXIT_CODE"
