@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"ripper/internal/prflt"
+	"ripper/internal/db"
 )
 
 type Status struct {
@@ -144,9 +145,10 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//go:embed status_page.gohtml
+//go:embed templates/*.gohtml
 var templateFS embed.FS
-var statusTmpl = template.Must(template.ParseFS(templateFS, "status_page.gohtml"))
+var statusTmpl = template.Must(template.ParseFS(templateFS, "templates/status_page.gohtml"))
+var recordsTmpl = template.Must(template.ParseFS(templateFS, "records_page.gohtml"))
 
 func StatusHandler(w http.ResponseWriter, r *http.Request) {
 	statuses, err := getStatuses()
@@ -158,6 +160,22 @@ func StatusHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := statusTmpl.Execute(w, statuses); err != nil {
+		log.Printf("template execution error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func RecordsHandler(w http.ResponseWriter, r *http.Request) {
+	records, err := db.GetAllRecords()
+	if err != nil {
+		log.Printf("GetAllRecords failed: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := recordsTmpl.Execute(w, records); err != nil {
 		log.Printf("template execution error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -230,6 +248,7 @@ func Serve() {
 
 	http.HandleFunc("GET /{$}", StatusHandler)
 	http.HandleFunc("GET /json", JsonHandler)
+	http.HandleFunc("GET /records", RecordsHandler)
 	http.HandleFunc("GET /logs/{drv}", LogHandler)
 
 	srv := &http.Server{

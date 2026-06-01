@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"text/tabwriter"
 
 	"ripper/internal/db"
 	"ripper/internal/web"
@@ -48,6 +49,27 @@ var createDbRecordCmd = &cobra.Command{
 	},
 }
 
+var listRecordsCmd = &cobra.Command{
+	Use:   "list-records",
+	Short: "List all rip records from the database.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		records, err := db.GetAllRecords()
+		if err != nil {
+			return err
+		}
+
+		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "ID\tSTART\tTITLE\tDEVICE\tEXIT\tRIP MB")
+		for _, r := range records {
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%d\t%d\n",
+				r.RunID, r.StartTime, r.Title, r.Device, r.ExitCode, r.TotalRipMB)
+		}
+		return w.Flush()
+	},
+}
+
+
 func init() {
 	rootCmd.AddCommand(createDbRecordCmd)
+	rootCmd.AddCommand(listRecordsCmd)
 }
