@@ -1,0 +1,14 @@
+[Unit]
+Description=Ripper status server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=saturn-svc
+Type=simple
+ExecStart=/usr/local/bin/ripper serve
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

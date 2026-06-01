@@ -1,27 +1,31 @@
 package main
 
 import (
-	"log"
-	"net/http"
-	"time"
+	"fmt"
+	"os"
 
-	"rip-status/web"
+	"ripper/cmd"
+	"ripper/internal/db"
+	"ripper/internal/prflt"
 )
 
-
 func main() {
-	web.OpenStatusFile()
-	
-	http.HandleFunc("GET /{$}", web.StatusHandler)
-	http.HandleFunc("GET /json", web.JsonHandler)
-	http.HandleFunc("GET /logs/{drv}", web.LogHandler)
-
-	srv := &http.Server{
-		Addr: ":9511",
-		ReadTimeout: 5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout: 60 * time.Second,
+	err := prflt.Init()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "preflight initialization error: %s.\n Exiting ...", err)
+		os.Exit(1)
 	}
 
-	log.Fatal(srv.ListenAndServe())
+	database, err := db.Init(prflt.MasterConfig.RipConfig.RipDBDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "database initialization error: %s.\n Exiting ...", err)
+		os.Exit(1)
+	}
+	defer db.Close(database)
+
+	db.RipRecordDB = database
+
+	if err := cmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }

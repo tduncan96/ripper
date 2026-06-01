@@ -1,21 +1,23 @@
-name: Build and Deploy rip-status
+name: Build and Deploy ripper
 
 on:
   push:
-    branches: [main]
+  pull_request:
 
 jobs:
-  build-deploy:
+  checks:
     runs-on: ubuntu-latest
     container: golang:1.26-alpine
     steps:
       - name: Install deps
-        run: apk add --no-cache git openssh-client
+        run: apk add --no-cache git shellcheck
 
       - name: Clone repo
-        run: git -c http.sslVerify=false clone http://192.168.0.99:3000/tduncan/rip-status.git .
+        run: |
+          git -c http.sslVerify=false clone http://192.168.0.99:3000/tduncan/ripper.git .
+          git checkout "$GITHUB_SHA"
 
-      - name: Code quality and security checks
+      - name: Go linting and security checks
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@latest
           go install github.com/securego/gosec/v2/cmd/gosec@latest
@@ -26,22 +28,47 @@ jobs:
           gosec ./...
           govulncheck ./...
 
+      - name: Shellcheck scripts
+        run: git ls-files '*.sh' | xargs -r shellcheck
+
+  deploy:
+    needs: checks
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    container: golang:1.26-alpine
+    steps:
+      - name: Install deps
+        run: apk add --no-cache git openssh-client
+
+      - name: Clone repo
+        run: |
+          git -c http.sslVerify=false clone http://192.168.0.99:3000/tduncan/ripper.git .
+          git checkout "$GITHUB_SHA"
+
       - name: Build
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-            go build -ldflags="-s -w" -o rip-status .
+            go build -ldflags="-s -w" -o ripper .
 
-      - name: Deploy to saturn
+      - name: Deploy
         env:
           SATURN_SVC_SSH_KEY: ${{ secrets.SATURN_SVC_SSH_KEY }}
         run: |
           eval "$(ssh-agent -s)"
           printf '%s\n' "$SATURN_SVC_SSH_KEY" | ssh-add -
-          scp -o StrictHostKeyChecking=no rip-status saturn-svc@192.168.0.99:/tmp/rip-status.new
+          scp -o StrictHostKeyChecking=no ripper saturn-svc@192.168.0.99:/tmp/ripper
+          scp -o StrictHostKeyChecking=no \
+            scripts/media-ripper.sh scripts/media-librarian.sh deploy/ripper.service \
+            saturn-svc@192.168.0.99:/tmp/
           ssh -o StrictHostKeyChecking=no saturn-svc@192.168.0.99 '
-            sudo mv /tmp/rip-status.new /usr/local/bin/rip-status &&
-            sudo chmod +x /usr/local/bin/rip-status &&
-            sudo systemctl restart rip-status &&
+            sudo -n install -d /usr/local/libexec &&
+            sudo -n install -m 0755 /tmp/media-ripper.sh /usr/local/libexec/media-ripper.sh &&
+            sudo -n install -m 0755 /tmp/media-librarian.sh /usr/local/libexec/media-librarian.sh &&
+            sudo -n install -m 0755 /tmp/ripper /usr/local/bin/ripper &&
+            sudo -n install -m 0644 /tmp/ripper.service /etc/systemd/system/ripper.service &&
+            sudo systemctl daemon-reload &&
+            sudo systemctl enable ripper &&
+            sudo systemctl restart ripper &&
             sleep 2 &&
-            systemctl is-active --quiet rip-status
+            systemctl is-active --quiet ripper
           '
