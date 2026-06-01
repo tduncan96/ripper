@@ -39,25 +39,18 @@ var ripCommand = &cobra.Command{
 		}
 
 		ripConfig := prflt.MasterConfig.RipConfig
+		ripArgs := []string{
+			ripConfig.Permanent, // 1
+			ripConfig.Staging,   // 2
+			ripConfig.StatusTmp, // 3
+			ripConfig.LogTmp,    // 4
+			ripConfig.NtfyURL,   // 5
+			drvNum,              // 6
+			media,               // 7
+			season,              // 8
+		}
 
-		staging := ripConfig.Staging
-		permanent := ripConfig.Permanent
-		statusTmpPath := ripConfig.StatusTmp
-		logTmpPath := ripConfig.LogTmp
-		ntfyURL := ripConfig.NtfyURL
-
-		//nosec G204 -- script dir is a trusted constant; numeric/enum args validated; exec uses no shell
-		c := exec.Command( 
-			script,        // 0
-			permanent,     // 1
-			staging,       // 2
-			statusTmpPath, // 3
-			logTmpPath,    // 4
-			ntfyURL,       // 5
-			drvNum,        // 6
-			media,         // 7
-			season,        // 8
-		)
+		c := exec.Command(script, ripArgs...) // #nosec G204 -- script dir is a trusted constant; numeric/enum args validated; exec uses no shell
 
 		if err := c.Start(); err != nil {
 			return fmt.Errorf("rip failed during initialization: %w", err)
@@ -78,10 +71,7 @@ var librarianCommand = &cobra.Command{
 		script := filepath.Join(prflt.MasterConfig.SystemConfig.ScriptDir, "media-librarian.sh")
 
 		librConfig := prflt.MasterConfig.LibrarianConfig
-
-		//nosec G204 -- script dir is a trusted constant; numeric/enum args validated; exec uses no shell
-		c := exec.Command( 
-			script,                                 // 0
+		librArgs := []string{
 			librConfig.JellyURL,                    // 1
 			librConfig.JellyKey,                    // 2
 			librConfig.BookURL,                     // 3
@@ -89,7 +79,10 @@ var librarianCommand = &cobra.Command{
 			librConfig.BookTokenID,                 // 5
 			librConfig.BookKey,                     // 6
 			prflt.MasterConfig.RipConfig.Permanent, // 7
-		)
+		}
+
+		c := exec.Command(script, librArgs...) // #nosec G204 -- script dir is a trusted constant; numeric/enum args validated; exec uses no shell
+
 
 		if err := c.Run(); err != nil {
 			return fmt.Errorf("media cataloging failed during initialization: %w", err)
