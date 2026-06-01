@@ -55,6 +55,9 @@ var ripCommand = &cobra.Command{
 		if err := c.Start(); err != nil {
 			return fmt.Errorf("rip failed during initialization: %w", err)
 		}
+
+		pid := c.Process.Pid
+		fmt.Fprintf(cmd.OutOrStdout(), "Process spawned. PID: %d\n", pid)
 		return nil
 	},
 }
@@ -86,6 +89,9 @@ var librarianCommand = &cobra.Command{
 		if err := c.Run(); err != nil {
 			return fmt.Errorf("media cataloging failed during initialization: %w", err)
 		}
+
+		pid := c.Process.Pid
+		fmt.Fprintf(cmd.OutOrStdout(), "Process spawned. PID: %d\n", pid)
 		return nil
 	},
 }

@@ -28,25 +28,14 @@ var schema string
 var RipRecordDB *sql.DB
 
 func Init(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path)
+	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
 	if err := db.Ping(); err != nil {
 		return nil, err
 	}
-
-	result, err := db.Exec("PRAGMA journal_mode=WAL;")
-	if err != nil {
-		return nil, err
-	}
-	fmt.Printf("db.Exec success: %s", result)
-
-	result, err = db.Exec("PRAGMA foreign_keys=ON;")
-	if err != nil {
-		return nil, err
-	}
-	fmt.Printf("db.Exec success: %s", result)
 
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
