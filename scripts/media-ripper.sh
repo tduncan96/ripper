@@ -61,7 +61,7 @@ set -uo pipefail
         write_status "$phase"
         
         echo "Creating record ..."
-        ripper record # Internal cobra command -> ripper/cmd/dbcmd.go
+        /usr/local/bin/ripper record # Internal cobra command -> ripper/cmd/dbcmd.go
 
         echo "merciful bliss ..."
         exit "$EXIT_CODE"
@@ -69,7 +69,7 @@ set -uo pipefail
 
     # shellcheck disable=SC2329
     on_signal() {
-        trap '' INT TERM
+        trap '' INT TERM HUP QUIT
         echo ""
         echo "Signal received, cleaning up ..."
         for p in "${MKV_PID:-}" "${rsync_pid:-}"; do
