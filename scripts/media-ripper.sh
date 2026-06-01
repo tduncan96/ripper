@@ -253,6 +253,8 @@ set -uo pipefail
     WAIT_MAX_SECS=5400
     RESERVE_STALE_SECS=120
 
+    DEST_REL=""
+
     exec > >(ts '%Y-%m-%d %H:%M:%S' | tee -a "$LOG") 2>&1
     echo "Run PID: $$"
     echo "Command Received: $0 $*"
