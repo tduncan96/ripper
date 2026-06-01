@@ -19,7 +19,7 @@ type Config struct {
 		StatusTmp string
 		LogTmp    string
 		NtfyURL   string
-		RipDBDir  string
+		RipDbPath  string
 	}
 	LibrarianConfig struct {
 		JellyURL    string
@@ -55,8 +55,8 @@ func (c *Config) validate() (ripError, librError error) {
 	if c.RipConfig.NtfyURL == "" {
 		ripMissing = append(ripMissing, "NTFY_URL")
 	}
-	if c.RipConfig.RipDBDir == "" {
-		c.RipConfig.RipDBDir = "/opt/ripper"
+	if c.RipConfig.RipDbPath == "" {
+		c.RipConfig.RipDbPath = "/opt/ripper"
 	}
 
 	if len(ripMissing) > 0 {
@@ -138,7 +138,7 @@ func ReadConfigFiles() (ripErr, librErr, error error) {
 			MasterConfig.RipConfig.StatusTmp = vars["STATUS_TMP"]
 			MasterConfig.RipConfig.LogTmp = vars["LOG_TMP"]
 			MasterConfig.RipConfig.NtfyURL = vars["NTFY_URL"]
-			MasterConfig.RipConfig.RipDBDir = vars["RIP_DB_DIR"]
+			MasterConfig.RipConfig.RipDbPath = vars["RIP_DB_PATH"]
 		case "libr.env":
 			MasterConfig.LibrarianConfig.JellyURL = vars["JELLYFIN_URL"]
 			MasterConfig.LibrarianConfig.JellyKey = vars["JELLYFIN_API_KEY"]

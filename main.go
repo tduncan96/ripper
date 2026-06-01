@@ -16,7 +16,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	database, err := db.Init(prflt.MasterConfig.RipConfig.RipDBDir)
+	database, err := db.Init(prflt.MasterConfig.RipConfig.RipDbPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "database initialization error: %s.\n Exiting ...", err)
 		os.Exit(1)
