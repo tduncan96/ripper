@@ -254,8 +254,8 @@ set -uo pipefail
     RESERVE_STALE_SECS=120
 
     DEST_REL=""
-
-    exec > >(ts '%Y-%m-%d %H:%M:%S' | tee -a "$LOG") 2>&1
+    
+    exec > >(ts '%Y-%m-%d %H:%M:%S' | tee "$LOG") 2>&1
     echo "Run PID: $$"
     echo "Command Received: $0 $*"
     echo "Start: $(date)"
