@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"os"
 
 	_ "modernc.org/sqlite"
 )
@@ -55,7 +56,11 @@ func Init(path string) (*sql.DB, error) {
 }
 
 func Close(db *sql.DB) {
-	db.Close()
+	err := db.Close()
+	if err != nil {
+		fmt.Printf("error closing db: %s", err)
+		os.Exit(1)
+	}
 }
 
 func (r *Record) CreateRecord() (int64, error) {

@@ -46,7 +46,7 @@ var ripCommand = &cobra.Command{
 		logTmpPath := ripConfig.LogTmp
 		ntfyURL := ripConfig.NtfyURL
 
-		c := exec.Command(
+		c := exec.Command( //nosec G204 -- script dir is a trusted constant; numeric/enum args validated; exec uses no shell
 			script,        // 0
 			permanent,     // 1
 			staging,       // 2
@@ -78,7 +78,7 @@ var librarianCommand = &cobra.Command{
 
 		librConfig := prflt.MasterConfig.LibrarianConfig
 
-		c := exec.Command(
+		c := exec.Command( //nosec G204 -- script dir is a trusted constant; numeric/enum args validated; exec uses no shell
 			script,                                 // 0
 			librConfig.JellyURL,                    // 1
 			librConfig.JellyKey,                    // 2
