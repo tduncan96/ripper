@@ -1,6 +1,8 @@
 #!/bin/bash
 set -uo pipefail
 
+MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
+
 # === Helper functions ===
     exit_handler() {
         local msg="$1" phase
@@ -95,6 +97,10 @@ set -uo pipefail
         echo "${result:-$fallback}"
     }
 
+    staging_avail() {
+        df --output=avail -BM "$STAGING" | tail -n1 | tr -dc '0-9'
+    }
+
     write_status() {
         local phase="$1"
         local now elapsed_seconds full_dest
@@ -177,7 +183,7 @@ set -uo pipefail
             # Single jq call extracts all needed fields as tab-separated values.
             data=$(jq -r '[.phase // "", .updated_epoch // 0, .total_rip_mb // 0, .cur_rip_mb // 0] | @tsv' "$f" 2>/dev/null) || continue
             IFS=$'\t' read -r phase upd t c <<< "$data"
-            case "$phase" in
+            case "${phase%% *}" in
                 Ripping|Moving|Waiting) ;;
                 *) continue ;;
             esac
@@ -203,12 +209,66 @@ set -uo pipefail
             [[ "$f" == "$STATUS" ]] && continue
             data=$(jq -r '[.phase // "", .updated_epoch // 0] | @tsv' "$f" 2>/dev/null) || continue
             IFS=$'\t' read -r phase upd <<< "$data"
-            [[ "$phase" == "Starting" ]] || continue
+            [[ "${phase%% *}" == "Starting" ]] || continue
             [[ "$upd" =~ ^[0-9]+$ ]] || upd=0
             (( now - upd > RESERVE_STALE_SECS )) && continue   # stale: don't block on it
             return 0
         done
         return 1
+    }
+
+    # --- MakeMKV beta-key handling ---
+    # Pulls the current beta key from the forum, hardened against server-side
+    # HTTP errors (curl --fail makes any 4xx/5xx non-zero; --retry covers
+    # transient 5xx/connection failures). Echoes the key on success.
+    fetch_makemkv_beta_key() {
+        local html rc key
+        html=$(curl -fsSL --connect-timeout 10 --max-time 25 \
+                    --retry 3 --retry-delay 2 --retry-connrefused \
+                    -A 'Mozilla/5.0 (X11; Linux x86_64)' -- "$MAKEMKV_KEY_URL")
+        rc=$?
+        (( rc != 0 )) && { echo "makemkv: forum fetch failed (curl exit $rc)" >&2; return 1; }
+
+        key=$(printf '%s' "$html" | grep -oE 'T-[A-Za-z0-9_+/=@-]{40,}' | head -n1)
+        [[ $key =~ ^T-[A-Za-z0-9_+/=@-]{40,}$ ]] || { echo "makemkv: no key parsed from page" >&2; return 1; }
+
+        printf '%s\n' "$key"
+    }
+
+    # Replaces app_Key in settings.conf without touching other settings.
+    apply_makemkv_key() {
+        local key="$1"
+        local conf="${HOME}/.MakeMKV/settings.conf"
+        mkdir -p "${conf%/*}" && touch "$conf" || return 1
+        { grep -v '^app_Key' "$conf"; printf 'app_Key = "%s"\n' "$key"; } > "${conf}.tmp" \
+            && mv -- "${conf}.tmp" "$conf"
+    }
+
+    # True when makemkvcon output reports an expired registration/eval key.
+    # Keys on the language-neutral message CODES (5052 = "Evaluation period has
+    # expired", 5055 = "...shareware functionality unavailable"), NOT localized
+    # text. A "version is too old" warning is a different code and is ignored,
+    # so a pinned-but-working version with a current key still passes.
+    makemkv_key_expired_output() {
+        grep -qE 'MSG:(5052|5055),' <<<"$1"
+    }
+
+    # Best-effort: refresh the key but never abort the run if the forum is
+    # unreachable -- an existing valid key still works, and the expiry gate
+    # below is the authoritative check.
+    refresh_makemkv_key() {
+        local key
+        if key=$(fetch_makemkv_beta_key); then
+            if apply_makemkv_key "$key"; then
+                echo "MakeMKV beta key refreshed from forum."
+            else
+                echo "WARN: fetched beta key but could not write settings.conf; using existing key."
+                [[ -n "${NTFY_URL:-}" ]] && curl -sd "[${DRIVE_TAG:-?}] WARN: could not write MakeMKV key" "$NTFY_URL"
+            fi
+        else
+            echo "WARN: could not fetch latest beta key; relying on existing key."
+            [[ -n "${NTFY_URL:-}" ]] && curl -sd "[${DRIVE_TAG:-?}] WARN: MakeMKV key fetch failed" "$NTFY_URL"
+        fi
     }
 
 # === Initialization ===
@@ -306,11 +366,32 @@ set -uo pipefail
     fi
 
     sleep 5
-    if ! udevadm info --query=property --name="$DEVICE" | grep -q '^ID_FS_TYPE='; then
+    UDEV_PROPS=$(udevadm info --query=property --name="$DEVICE")
+    if ! grep -q '^ID_FS_TYPE=' <<<"$UDEV_PROPS"; then
         exit_handler "Disc unreadable; no recognizable filesystem. Exiting ..." 3
     fi
 
+    # Provisional title from the disc volume label so an early failure still
+    # carries a name in the log/status record. MakeMKV overrides it below once
+    # it can actually read the disc.
+    RAW_TITLE=$(sed -n 's/^ID_FS_LABEL=//p' <<<"$UDEV_PROPS")
+    [[ -z "$RAW_TITLE" ]] && RAW_TITLE="UNKNOWN-$DRIVE_TAG"
+    echo "Provisional disc title (udev): $RAW_TITLE"
+    write_status "Starting ..."
+
+# === MakeMKV beta key refresh ===
+    echo "Refreshing MakeMKV beta key ..."
+    refresh_makemkv_key
+
 # === MakeMKV index resolution ===
+    # SIMPLIFICATION (untested on this build): the disc:9999 enumeration below
+    # exists only to map $DEVICE -> disc:N. MakeMKV also accepts a "dev:" source,
+    # so this whole section can be dropped and every "disc:$MKV_INDEX" replaced
+    # with "dev:$DEVICE" (info and mkv calls). RAW_TITLE would then match the DRV
+    # line by device instead of index:
+    #   RAW_TITLE=$(echo "$INFO_OUTPUT" | awk -F',' -v dev="\"$DEVICE\"" \
+    #       '$1 ~ /^DRV:/ && $NF == dev {split($0,a,"\""); print a[4]; exit}')
+    # Verify the DRV: line format under a dev: source before switching.
     echo "Resolving MakeMKV disc index for $DEVICE ..."
     write_status "Starting ..."
     DRV_LIST=$(makemkvcon -r --cache=1 info disc:9999 2>/dev/null)
@@ -329,11 +410,21 @@ set -uo pipefail
     echo "Getting disc info ..."
     write_status "Starting ..."
     INFO_OUTPUT=$(makemkvcon -r info "disc:$MKV_INDEX")
-    RAW_TITLE=$(echo "$INFO_OUTPUT" | awk -F',' -v idx="DRV:$MKV_INDEX" '$1 == idx {
+
+    # Authoritative key-expiry gate: opening the real disc is when MakeMKV
+    # exercises shareware (decryption) functionality, so an expired key surfaces
+    # MSG:5052/5055 here. Abort before ripping. Exit code 1 keeps the disc in
+    # the drive (no eject) so the rip can be retried once the key is updated.
+    if makemkv_key_expired_output "$INFO_OUTPUT"; then
+        exit_handler "MakeMKV beta key expired (MSG 5052/5055); disc cannot be decrypted. Update the forum key and retry." 1
+    fi
+
+    MKV_TITLE=$(echo "$INFO_OUTPUT" | awk -F',' -v idx="DRV:$MKV_INDEX" '$1 == idx {
         n = split($0, a, "\"");
         # fields: ...,"drive name","disc name","device" -> disc name is a[4]
         print a[4]; exit
     }')
+    [[ -n "$MKV_TITLE" ]] && RAW_TITLE="$MKV_TITLE"
     echo "Detected disc title: $RAW_TITLE"
 
     TITLE=$(echo "$RAW_TITLE" | sed -E 's/[._ -]+(SEASON|S|DISC|D|WW|BOOK|VOLUME)[._ -]*[0-9]+([._ -]*(DISC|D)[._ -]*[0-9]+)?[._ -]*$//I')
@@ -408,9 +499,11 @@ set -uo pipefail
         OUT_MAP[$track]=$line
     done
 
+    TRACK_MAP=""
     for t in $(printf '%s\n' "${!OUT_MAP[@]}" | sort -n); do
-        printf '%s' "${OUT_MAP[$t]}"
+        TRACK_MAP+="${OUT_MAP[$t]}"
     done
+    printf '%s' "$TRACK_MAP"
 
     INFO_DEST="$PERMANENT/$DEST_REL/logs/$RAW_TITLE.info"
     mkdir -p "$(dirname "$INFO_DEST")"
@@ -424,16 +517,14 @@ set -uo pipefail
     {
         echo "=== Track Map ==="
         echo "$RAW_TITLE"
-        for t in $(printf '%s\n' "${!OUT_MAP[@]}" | sort -n); do
-            printf '%s' "${OUT_MAP[$t]}"
-        done
+        printf '%s' "$TRACK_MAP"
         echo
         echo "=== Raw MakeMKV Info ==="
         echo "$INFO_OUTPUT"
     } > "$INFO_DEST"
     echo "Saved disc info to $INFO_DEST"
 
-    DEST_AVAIL=$(df --output=avail -BM "$STAGING" | tail -n1 | tr -d ' M')
+    DEST_AVAIL=$(staging_avail)
     echo "Available capacity in staging: $DEST_AVAIL MB"
 
 # === Track selection and size estimation ===
@@ -479,11 +570,7 @@ set -uo pipefail
             max_bytes=0
             largest_track=0
             for k in "${!TITLE_BYTES[@]}"; do
-                v=${TITLE_BYTES[$k]}
-                if [[ -z "$max_bytes" || "$v" -gt "$max_bytes" ]]; then
-                    max_bytes=$v
-                    largest_track=$k
-                fi
+                (( TITLE_BYTES[$k] > max_bytes )) && { max_bytes=${TITLE_BYTES[$k]}; largest_track=$k; }
             done
             TOTAL_MB=$(( max_bytes / 1024 / 1024 ))
             SEL_TRACKS="$largest_track"
@@ -531,7 +618,7 @@ set -uo pipefail
         else
             exit_handler "Insufficient staging capacity: need ~$NEEDED MB, raw available $DEST_AVAIL MB (reserved $reserved MB)." 4
         fi
-        DEST_AVAIL=$(df --output=avail -BM "$STAGING" | tail -n1 | tr -dc '0-9')
+        DEST_AVAIL=$(staging_avail)
         reserved=$(reserved_by_others)
         effective_avail=$(( DEST_AVAIL - reserved ))
     done
@@ -630,7 +717,7 @@ set -uo pipefail
 
         all_sizes=()
         for f in "${sorted_files[@]}"; do
-            all_sizes+=("$(stat -c%s "$f" | awk '{printf "%d", $1/1024/1024}')")
+            all_sizes+=("$(( $(stat -c%s "$f") / 1024 / 1024 ))")
         done
         mapfile -t sorted_sz < <(printf '%s\n' "${all_sizes[@]}" | sort -rn)
         anchor_size="${sorted_sz[1]:-${sorted_sz[0]}}"
@@ -657,7 +744,7 @@ set -uo pipefail
             name="${TITLE_NAMES[$tn]:-}"
             dur="${TITLE_DURATIONS[$tn]:-??:??:??}"
 
-            f_size=$(stat -c%s "$f" | awk '{printf "%d", $1/1024/1024}')
+            f_size=$(( $(stat -c%s "$f") / 1024 / 1024 ))
             i=$(( ep + offset ))
 
             if (( f_size > trash_thresh )) || (( f_size < extras_thresh )); then
