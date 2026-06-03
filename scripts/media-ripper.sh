@@ -253,9 +253,6 @@ MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
         grep -qE 'MSG:(5052|5055),' <<<"$1"
     }
 
-    # Best-effort: refresh the key but never abort the run if the forum is
-    # unreachable -- an existing valid key still works, and the expiry gate
-    # below is the authoritative check.
     refresh_makemkv_key() {
         local key
         if key=$(fetch_makemkv_beta_key); then
@@ -263,11 +260,9 @@ MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
                 echo "MakeMKV beta key refreshed from forum."
             else
                 echo "WARN: fetched beta key but could not write settings.conf; using existing key."
-                [[ -n "${NTFY_URL:-}" ]] && curl -sd "[${DRIVE_TAG:-?}] WARN: could not write MakeMKV key" "$NTFY_URL"
             fi
         else
             echo "WARN: could not fetch latest beta key; relying on existing key."
-            [[ -n "${NTFY_URL:-}" ]] && curl -sd "[${DRIVE_TAG:-?}] WARN: MakeMKV key fetch failed" "$NTFY_URL"
         fi
     }
 
@@ -371,17 +366,11 @@ MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
         exit_handler "Disc unreadable; no recognizable filesystem. Exiting ..." 3
     fi
 
-    # Provisional title from the disc volume label so an early failure still
-    # carries a name in the log/status record. MakeMKV overrides it below once
-    # it can actually read the disc.
     RAW_TITLE=$(sed -n 's/^ID_FS_LABEL=//p' <<<"$UDEV_PROPS")
     [[ -z "$RAW_TITLE" ]] && RAW_TITLE="UNKNOWN-$DRIVE_TAG"
     echo "Provisional disc title (udev): $RAW_TITLE"
     write_status "Starting ..."
 
-# === MakeMKV beta key refresh ===
-    echo "Refreshing MakeMKV beta key ..."
-    refresh_makemkv_key
 
 # === MakeMKV index resolution ===
     # SIMPLIFICATION (untested on this build): the disc:9999 enumeration below
@@ -392,6 +381,10 @@ MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
     #   RAW_TITLE=$(echo "$INFO_OUTPUT" | awk -F',' -v dev="\"$DEVICE\"" \
     #       '$1 ~ /^DRV:/ && $NF == dev {split($0,a,"\""); print a[4]; exit}')
     # Verify the DRV: line format under a dev: source before switching.
+
+    echo "Refreshing MakeMKV beta key ..."
+    refresh_makemkv_key
+
     echo "Resolving MakeMKV disc index for $DEVICE ..."
     write_status "Starting ..."
     DRV_LIST=$(makemkvcon -r --cache=1 info disc:9999 2>/dev/null)
@@ -411,12 +404,8 @@ MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
     write_status "Starting ..."
     INFO_OUTPUT=$(makemkvcon -r info "disc:$MKV_INDEX")
 
-    # Authoritative key-expiry gate: opening the real disc is when MakeMKV
-    # exercises shareware (decryption) functionality, so an expired key surfaces
-    # MSG:5052/5055 here. Abort before ripping. Exit code 1 keeps the disc in
-    # the drive (no eject) so the rip can be retried once the key is updated.
     if makemkv_key_expired_output "$INFO_OUTPUT"; then
-        exit_handler "MakeMKV beta key expired (MSG 5052/5055); disc cannot be decrypted. Update the forum key and retry." 1
+        exit_handler "MakeMKV beta key expired (MSG 5052/5055); disc cannot be decrypted. Update the forum key and retry." 3
     fi
 
     MKV_TITLE=$(echo "$INFO_OUTPUT" | awk -F',' -v idx="DRV:$MKV_INDEX" '$1 == idx {
