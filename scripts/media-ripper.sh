@@ -1,8 +1,6 @@
 #!/bin/bash
 set -uo pipefail
 
-MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
-
 # === Helper functions ===
     exit_handler() {
         local msg="$1" phase
@@ -298,6 +296,7 @@ MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
     WAIT_POLL_SECS=10
     WAIT_MAX_SECS=5400
     RESERVE_STALE_SECS=120
+    MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
 
     DEST_REL=""
     
