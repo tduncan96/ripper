@@ -856,28 +856,28 @@ set -uo pipefail
     exec 201>"/var/lock/movie-ripper.promote.lock"
     flock 201
 
-    PERM_BASE=$(safe_du "$PERM_DIR")
-    STAGE_TOTAL=$(safe_du "$STAGE_DIR")
+    STAGE_START_SIZE=$(safe_du "$STAGE_DIR")
     CURRENT_MV_MB=0
     write_status "Moving ..."
 
-    rsync -a --inplace --remove-source-files "$STAGE_DIR/" "$PERM_DIR/" &
-    rsync_pid=$!
-    while kill -0 "$rsync_pid" 2>/dev/null; do
-        CURRENT_MV_MB=$(( $(safe_du "$PERM_DIR") - PERM_BASE ))
-        (( CURRENT_MV_MB < 0 )) && CURRENT_MV_MB=0
-        (( CURRENT_MV_MB > STAGE_TOTAL )) && CURRENT_MV_MB=$STAGE_TOTAL
-        write_status "Moving ..."
-        sleep 1
-    done
-    wait "$rsync_pid"; rc=$?
+    rsync -a --inplace --remove-source-files --info=progress2 --outbuf=N \
+          "$STAGE_DIR/" "$PERM_DIR/" \
+        | while IFS= read -r -d $'\r' line; do
+              [[ "$line" == *%* ]] || continue
+              bytes=$(grep -oE '[0-9,]+' <<<"$line" | head -1 | tr -d ',')
+              [[ "$bytes" =~ ^[0-9]+$ ]] || continue
+              CURRENT_MV_MB=$(( bytes / 1024 / 1024 ))
+              write_status "Moving ..."
+          done
+    rc=${PIPESTATUS[0]}
 
     find "$STAGE_DIR" -type d -empty -delete 2>/dev/null || true
 
     if (( rc != 0 )); then
         echo "WARN: rsync exited $rc; unverified files left in $STAGE_DIR"
     fi
-    CURRENT_MV_MB=$STAGE_TOTAL
+
+    CURRENT_MV_MB=$STAGE_START_SIZE
     write_status "Moving ..."
     echo "Promotion complete."
 
