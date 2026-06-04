@@ -145,10 +145,10 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//go:embed templates/*.gohtml
-var templateFS embed.FS
-var statusTmpl = template.Must(template.ParseFS(templateFS, "templates/status_page.gohtml"))
-var recordsTmpl = template.Must(template.ParseFS(templateFS, "templates/records_page.gohtml"))
+//go:embed templates/* static/*
+var assetFS embed.FS
+var statusTmpl = template.Must(template.ParseFS(assetFS, "templates/status_page.gohtml"))
+var recordsTmpl = template.Must(template.ParseFS(assetFS, "templates/records_page.gohtml"))
 
 func StatusHandler(w http.ResponseWriter, r *http.Request) {
 	statuses, err := getStatuses()
@@ -243,8 +243,15 @@ func (s *Status) ElapsedHMS() string {
 func Serve() {
 	err := OpenStatusFile()
 	if err != nil {
-		log.Fatalf("Error opening status root: %v", err)
+		log.Fatalf("error opening status root: %v", err)
 	}
+
+	staticFS, err := fs.Sub(assetFS, "static")
+	if err != nil {
+		log.Fatalf("error with embeded static dir: %v", err)
+		return
+	}
+	http.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(staticFS)))
 
 	http.HandleFunc("GET /{$}", StatusHandler)
 	http.HandleFunc("GET /json", JsonHandler)

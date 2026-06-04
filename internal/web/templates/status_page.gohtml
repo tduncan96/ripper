@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="refresh" content="1">
+    <script src="/static/htmx.min.js"></script>
     <title>Rip Status</title>
         <style>
         body {
@@ -123,7 +124,9 @@
         {{else}}
         <p class="empty">No rip status files found.</p>
         {{end}}
-        <a href="https://rip.saturn.lan/records" target="_blank"><i>Records</i></a><br>
-        <a href="https://rip.saturn.lan/json" target="_blank"><i>JSON Dump</i></a>
+        <div class="bar">
+            <a href="https://rip.saturn.lan/records" target="_blank"><i>Records</i></a><br>
+            <a href="https://rip.saturn.lan/json" target="_blank"><i>JSON Dump</i></a>
+        </div>
     </body>
 </html>
