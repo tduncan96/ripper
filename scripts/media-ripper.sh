@@ -46,14 +46,14 @@ MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
 
         local log_dest
         if [[ -n "$DEST_REL" ]]; then
-            log_dest="$PERMANENT/$DEST_REL/logs/$RAW_TITLE.rip.log"
+            log_dest="$PERMANENT/$DEST_REL/Logs/$RAW_TITLE.rip.log"
             mkdir -p "$(dirname "$log_dest")"
             if [[ -e "$log_dest" ]]; then
                 local j=1
-                while [[ -e "$PERMANENT/$DEST_REL/logs/$RAW_TITLE(${j}).rip.log" ]]; do
+                while [[ -e "$PERMANENT/$DEST_REL/Logs/$RAW_TITLE(${j}).rip.log" ]]; do
                     ((j++))
                 done
-                log_dest="$PERMANENT/$DEST_REL/logs/$RAW_TITLE(${j}).rip.log"
+                log_dest="$PERMANENT/$DEST_REL/Logs/$RAW_TITLE(${j}).rip.log"
             fi
         else
             local ts fallback_dir
@@ -218,9 +218,6 @@ MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
     }
 
     # --- MakeMKV beta-key handling ---
-    # Pulls the current beta key from the forum, hardened against server-side
-    # HTTP errors (curl --fail makes any 4xx/5xx non-zero; --retry covers
-    # transient 5xx/connection failures). Echoes the key on success.
     fetch_makemkv_beta_key() {
         local html rc key
         html=$(curl -fsSL --connect-timeout 10 --max-time 25 \
@@ -235,7 +232,6 @@ MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
         printf '%s\n' "$key"
     }
 
-    # Replaces app_Key in settings.conf without touching other settings.
     apply_makemkv_key() {
         local key="$1"
         local conf="${HOME}/.MakeMKV/settings.conf"
@@ -244,11 +240,6 @@ MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
             && mv -- "${conf}.tmp" "$conf"
     }
 
-    # True when makemkvcon output reports an expired registration/eval key.
-    # Keys on the language-neutral message CODES (5052 = "Evaluation period has
-    # expired", 5055 = "...shareware functionality unavailable"), NOT localized
-    # text. A "version is too old" warning is a different code and is ignored,
-    # so a pinned-but-working version with a current key still passes.
     makemkv_key_expired_output() {
         grep -qE 'MSG:(5052|5055),' <<<"$1"
     }
@@ -281,9 +272,9 @@ MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
         fi
     done
     
-    while getopts "Et" opt; do
+    while getopts "et" opt; do
         case $opt in
-            E) eject_flag=true ;;
+            e) eject_flag=true ;;
             t) track_select=true ;;
             *) echo "[?] Invalid option: -$OPTARG"; exit 1 ;;
         esac
@@ -427,8 +418,8 @@ MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
         show)  DEST_REL="Shows/$TITLE/Season $SEASON" ;;
     esac
 
-    if [[ -d "$PERMANENT/$DEST_REL/logs" ]]; then
-        if compgen -G "$PERMANENT/$DEST_REL/logs/$RAW_TITLE*.rip.log" > /dev/null; then
+    if [[ -d "$PERMANENT/$DEST_REL/Logs" ]]; then
+        if compgen -G "$PERMANENT/$DEST_REL/Logs/$RAW_TITLE*.rip.log" > /dev/null; then
             echo "WARNING: Existing rip logs found for '$RAW_TITLE' in $PERMANENT/$DEST_REL/LOGs"
         fi
     fi
@@ -494,14 +485,14 @@ MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
     done
     printf '%s' "$TRACK_MAP"
 
-    INFO_DEST="$PERMANENT/$DEST_REL/logs/$RAW_TITLE.info"
+    INFO_DEST="$PERMANENT/$DEST_REL/Logs/$RAW_TITLE.info"
     mkdir -p "$(dirname "$INFO_DEST")"
     if [[ -e "$INFO_DEST" ]]; then
         j=1
-        while [[ -e "$PERMANENT/$DEST_REL/logs/$RAW_TITLE(${j}).info" ]]; do
+        while [[ -e "$PERMANENT/$DEST_REL/Logs/$RAW_TITLE(${j}).info" ]]; do
             ((j++))
         done
-        INFO_DEST="$PERMANENT/$DEST_REL/logs/$RAW_TITLE(${j}).info"
+        INFO_DEST="$PERMANENT/$DEST_REL/Logs/$RAW_TITLE(${j}).info"
     fi
     {
         echo "=== Track Map ==="
@@ -822,11 +813,20 @@ MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
                 mv "$file" "$STAGING/.quarantine/"
                 exit 1
             fi
-            if ! clamdscan --quiet "$file"; then
-                echo "FAIL: ClamAV flagged $file; $file  -> $STAGING/.quarantine"
-                mv "$file" "$STAGING/.quarantine/"
-                exit 1
-            fi
+            clamdscan --quiet --fdpass "$file"
+            rc=$?
+            case $rc in
+                0) ;;
+                1)
+                    echo "FAIL: ClamAV flagged $file -> $STAGING/.quarantine"
+                    mv "$file" "$STAGING/.quarantine/"
+                    exit 1
+                    ;;
+                *)
+                    echo "ERROR: clamdscan failed to scan $file (rc=$rc)"
+                    exit 2
+                    ;;
+            esac
         } &
         scanners[$!]="$file"
     done < <(find "$STAGE_DIR" -type f -print0)

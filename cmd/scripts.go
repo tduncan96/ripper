@@ -11,6 +11,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var ripEject bool
+var ripTrackSelect bool
+
 var ripCommand = &cobra.Command{
 	Use:   "rip <drv> <movie|show> <season| >",
 	Short: "Start media rip on specified drive.",
@@ -22,6 +25,15 @@ var ripCommand = &cobra.Command{
 		}
 
 		script := filepath.Join(prflt.MasterConfig.SystemConfig.ScriptDir, "media-ripper.sh")
+		
+		var optArgs []string
+		if ripEject {
+			optArgs = append(optArgs, "-e")
+		}
+		if ripTrackSelect {
+			optArgs = append(optArgs, "-t")
+		}
+		
 		drvNum := args[0]
 		if _, err := strconv.Atoi(drvNum); err != nil {
 			return fmt.Errorf("drive must be a number, got %q", drvNum)
@@ -39,7 +51,7 @@ var ripCommand = &cobra.Command{
 		}
 
 		ripConfig := prflt.MasterConfig.RipConfig
-		ripArgs := []string{
+		posArgs := []string{
 			ripConfig.Permanent, // 1
 			ripConfig.Staging,   // 2
 			ripConfig.StatusTmp, // 3
@@ -49,6 +61,8 @@ var ripCommand = &cobra.Command{
 			media,               // 7
 			season,              // 8
 		}
+
+		ripArgs := append(optArgs, posArgs...)
 
 		c := exec.Command(script, ripArgs...) // #nosec G204 -- script dir is a trusted constant; numeric/enum args validated; exec uses no shell
 
@@ -97,6 +111,8 @@ var librarianCommand = &cobra.Command{
 }
 
 func init() {
+	ripCommand.Flags().BoolVarP(&ripEject, "eject", "e", false, "eject disc after rip")
+	ripCommand.Flags().BoolVarP(&ripTrackSelect, "track-select", "t", false, "enable select of specific tracks")
 	rootCmd.AddCommand(ripCommand)
 	rootCmd.AddCommand(librarianCommand)
 }
