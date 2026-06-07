@@ -25,7 +25,7 @@ var ripCommand = &cobra.Command{
 		}
 
 		script := filepath.Join(prflt.MasterConfig.SystemConfig.ScriptDir, "media-ripper.sh")
-		
+
 		var optArgs []string
 		if ripEject {
 			optArgs = append(optArgs, "-e")
@@ -33,7 +33,7 @@ var ripCommand = &cobra.Command{
 		if ripTrackSelect {
 			optArgs = append(optArgs, "-t")
 		}
-		
+
 		drvNum := args[0]
 		if _, err := strconv.Atoi(drvNum); err != nil {
 			return fmt.Errorf("drive must be a number, got %q", drvNum)
