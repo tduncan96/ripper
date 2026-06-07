@@ -145,11 +145,6 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//go:embed templates/* static/*
-var assetFS embed.FS
-var statusTmpl = template.Must(template.ParseFS(assetFS, "templates/status_page.gohtml"))
-var recordsTmpl = template.Must(template.ParseFS(assetFS, "templates/records_page.gohtml"))
-
 func StatusHandler(w http.ResponseWriter, r *http.Request) {
 	statuses, err := getStatuses()
 	if err != nil {
@@ -239,6 +234,11 @@ func (s *Status) ElapsedHMS() string {
 	ss := sec % 60
 	return fmt.Sprintf("%d:%02d:%02d", h, m, ss)
 }
+
+//go:embed templates/* static/*
+var assetFS embed.FS
+var statusTmpl = template.Must(template.ParseFS(assetFS, "templates/status_page.gohtml"))
+var recordsTmpl = template.Must(template.ParseFS(assetFS, "templates/records_page.gohtml"))
 
 func Serve() {
 	err := OpenStatusFile()
