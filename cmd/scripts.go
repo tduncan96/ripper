@@ -15,7 +15,7 @@ var ripEject bool
 var ripTrackSelect bool
 
 var ripCommand = &cobra.Command{
-	Use:   "rip <drv> <movie|show> <season| >",
+	Use:   "rip <flags> <drv> <movie|show> <season| >",
 	Short: "Start media rip on specified drive.",
 	Args:  cobra.RangeArgs(2, 3),
 	RunE: func(cmd *cobra.Command, args []string) error {
