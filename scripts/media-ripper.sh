@@ -700,8 +700,8 @@ set -uo pipefail
         done
         mapfile -t sorted_sz < <(printf '%s\n' "${all_sizes[@]}" | sort -rn)
         anchor_size="${sorted_sz[1]:-${sorted_sz[0]}}"
-        extras_thresh=$(( anchor_size * 75 / 100 ))
-        trash_thresh=$(( anchor_size * 125 / 100 ))
+        extras_thresh=$(( anchor_size * 70 / 100 ))
+        trash_thresh=$(( anchor_size * 130 / 100 ))
         echo "Anchor: ${anchor_size}MB | Extras: <${extras_thresh}MB | Review: >${trash_thresh}MB"
 
         highest=0
