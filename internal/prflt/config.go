@@ -32,8 +32,8 @@ type Config struct {
 }
 
 var MasterConfig Config
-var configFilePath string = "/etc/ripper/env"
-var scriptFilePath string = "/usr/local/libexec"
+const configFilePath = "/etc/ripper/env"
+const scriptFilePath = "/usr/local/libexec"
 
 func (c *Config) validate() (ripError, librError error) {
 	var ripMissing []string
