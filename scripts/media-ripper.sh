@@ -294,7 +294,7 @@ set -uo pipefail
     LOG="${LOG_TMP/\*/$DRIVE_TAG}"
 
     WAIT_POLL_SECS=10
-    WAIT_MAX_SECS=5400
+    WAIT_MAX_SECS=7200
     RESERVE_STALE_SECS=120
     MAKEMKV_KEY_URL='https://forum.makemkv.com/forum/viewtopic.php?t=1053'
 
