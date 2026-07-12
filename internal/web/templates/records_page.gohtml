@@ -8,6 +8,7 @@
   table { border-collapse: collapse; width: 100%; }
   th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #333; }
   th { color: #9ab; }
+  a { color: #9ab; }
   tr:hover td { background: #222; }
   .ok { color: #6c6; }
   .fail { color: #e66; }
@@ -22,7 +23,7 @@
   <tbody>
     {{range .}}
     <tr>
-      <td>{{.RunID}}</td>
+      <td><a href="/records/{{.RunID}}">{{.RunID}}</a></td>
       <td>{{.StartTime}}</td>
       <td>{{.EndTime}}</td>
       <td>{{.Title}}</td>
@@ -30,6 +31,7 @@
       <td class="{{if eq .ExitCode 0}}ok{{else}}fail{{end}}">{{.ExitCode}}</td>
       <td>{{.TotalRipMB}}</td>
       <td>{{.TotalMvMB}}</td>
+      <td>
     </tr>
     {{else}}
     <tr><td colspan="8">No records yet.</td></tr>

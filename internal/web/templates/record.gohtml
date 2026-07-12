@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rip Record #{{.RunID}}</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #e0e0e0; margin: 2rem; }
+  a { color: #9ab; }
+  h1 { margin-bottom: 0.25rem; }
+  .sub { color: #888; margin-top: 0; }
+  .grid { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1.25rem; max-width: 640px; margin: 1.5rem 0; }
+  .grid dt { color: #9ab; font-weight: 600; }
+  .grid dd { margin: 0; word-break: break-all; }
+  .ok { color: #6c6; }
+  .fail { color: #e66; }
+  h2 { color: #9ab; border-bottom: 1px solid #333; padding-bottom: 0.35rem; }
+  pre.log { background: #111; border: 1px solid #333; border-radius: 4px; padding: 1rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.85rem; line-height: 1.4; max-height: 60vh; }
+</style>
+</head>
+<body>
+<p><a href="/records">&larr; All Records</a></p>
+<h1>{{if .Title}}{{.Title}}{{else}}Record #{{.RunID}}{{end}}</h1>
+<p class="sub">Run #{{.RunID}}</p>
+
+<dl class="grid">
+  <dt>Run ID</dt><dd>{{.RunID}}</dd>
+  <dt>Exit Code</dt><dd class="{{if eq .ExitCode 0}}ok{{else}}fail{{end}}">{{.ExitCode}}{{if eq .ExitCode 0}} (success){{else}} (failed){{end}}</dd>
+  <dt>Start Time</dt><dd>{{.StartTime}}</dd>
+  <dt>End Time</dt><dd>{{.EndTime}}</dd>
+  <dt>Title</dt><dd>{{.Title}}</dd>
+  <dt>Raw Title</dt><dd>{{.RawTitle}}</dd>
+  <dt>Device</dt><dd>{{.Device}}</dd>
+  <dt>Destination</dt><dd>{{.Destination}}</dd>
+  <dt>Total Rip</dt><dd>{{.TotalRipMB}} MB</dd>
+  <dt>Total Move</dt><dd>{{.TotalMvMB}} MB</dd>
+</dl>
+
+<h2>Logs</h2>
+<pre class="log">{{if .RipLog}}{{.RipLog}}{{else}}No logs recorded.{{end}}</pre>
+</body>
+</html>
