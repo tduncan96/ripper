@@ -19,7 +19,7 @@ type Config struct {
 		StatusTmp string
 		LogTmp    string
 		NtfyURL   string
-		RipDbPath  string
+		RipDbPath string
 	}
 	LibrarianConfig struct {
 		JellyURL    string
@@ -32,6 +32,7 @@ type Config struct {
 }
 
 var MasterConfig Config
+
 const configFilePath = "/etc/ripper/env"
 const scriptFilePath = "/usr/local/libexec"
 
@@ -120,17 +121,17 @@ func ReadConfigFiles() (ripErr, librErr, error error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		
+
 		vars, err := godotenv.Parse(f)
 		if err != nil {
 			return nil, nil, err
 		}
-		
+
 		err = f.Close()
 		if err != nil {
 			return nil, nil, err
 		}
-		
+
 		switch file.Name() {
 		case "rip.env":
 			MasterConfig.RipConfig.Permanent = vars["PERMANENT"]

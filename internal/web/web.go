@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"ripper/internal/prflt"
 	"ripper/internal/db"
+	"ripper/internal/prflt"
 )
 
 type Status struct {

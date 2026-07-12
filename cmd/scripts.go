@@ -111,7 +111,7 @@ var libCmd = &cobra.Command{
 }
 
 var unlockCmd = &cobra.Command{
-	Use: "unlock <drive number>",
+	Use:   "unlock <drive number>",
 	Short: "Removes the lock file for the given drive.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		_, err := strconv.Atoi(args[0])
@@ -130,6 +130,6 @@ var unlockCmd = &cobra.Command{
 func init() {
 	ripCmd.Flags().BoolVarP(&ripEject, "eject", "e", false, "eject disc after rip")
 	ripCmd.Flags().BoolVarP(&ripTrackSelect, "track-select", "t", false, "enable select of specific tracks")
-	
+
 	rootCmd.AddCommand(ripCmd, libCmd, unlockCmd)
 }

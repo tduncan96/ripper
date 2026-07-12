@@ -2,37 +2,42 @@ name: Build and Deploy ripper
 
 on:
   push:
-    branches:
-      - 'main'
   pull_request:
 
 jobs:
-  checks:
-    runs-on: ubuntu-latest
-    container: golang:1.26-alpine
-    steps:
-      - name: Install deps
-        run: apk add --no-cache git shellcheck
 
-      - name: Clone repo
+  bash:
+    runs-on: ubuntu-latest
+    container: koalaman/shellcheck-alpine:stable
+    steps:
+      - name: Install Deps
+        run: apk add --no-cache git
+
+      - name: Clone Repo
         run: |
           git -c http.sslVerify=false clone http://192.168.0.99:3000/tduncan/ripper.git .
           git checkout "$GITHUB_SHA"
 
-      - name: Go linting and security checks
-        run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          export PATH="$(go env GOPATH)/bin:$PATH"
-          go vet ./...
-          staticcheck ./...
-          gosec ./...
-
-      - name: Shellcheck scripts
+      - name: Linting
         run: git ls-files '*.sh' | xargs -r shellcheck
 
+  go:
+    runs-on: ubuntu-latest
+    container: golangci/golangci-lint:v2.12.2-alpine
+    steps:
+      - name: Install Deps
+        run: apk add --no-cache git
+
+      - name: Clone Repo
+        run: |
+          git -c http.sslVerify=false clone http://192.168.0.99:3000/tduncan/ripper.git .
+          git checkout "$GITHUB_SHA"
+     
+      - name: Linting
+        run: golangci-lint run ./...
+
   deploy:
-    needs: checks
+    needs: [bash, go]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     container: golang:1.26-alpine

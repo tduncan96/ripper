@@ -21,7 +21,7 @@ var createDbRecordCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		
+
 		status, err := web.GetStatus(drv)
 		if err != nil {
 			return err
@@ -67,7 +67,6 @@ var listRecordsCmd = &cobra.Command{
 		return w.Flush()
 	},
 }
-
 
 func init() {
 	rootCmd.AddCommand(createDbRecordCmd)
