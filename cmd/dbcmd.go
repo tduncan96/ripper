@@ -44,7 +44,9 @@ var createDbRecordCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Created run record. ID: %d\n", id)
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Created run record. ID: %d\n", id); err != nil {
+			return err
+		}
 		return nil
 	},
 }
@@ -59,16 +61,19 @@ var listRecordsCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tSTART\tTITLE\tDEVICE\tEXIT\tRIP MB")
+		if _, err := fmt.Fprintln(w, "ID\tSTART\tTITLE\tDEVICE\tEXIT\tRIP MB"); err != nil {
+			return err
+		}
 		for _, r := range records {
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%d\t%d\n",
-				r.RunID, r.StartTime, r.Title, r.Device, r.ExitCode, r.TotalRipMB)
+			if _, err := fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%d\t%d\n",
+				r.RunID, r.StartTime, r.Title, r.Device, r.ExitCode, r.TotalRipMB); err != nil {
+					return err
+				}
 		}
 		return w.Flush()
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(createDbRecordCmd)
-	rootCmd.AddCommand(listRecordsCmd)
+	rootCmd.AddCommand(createDbRecordCmd, listRecordsCmd)
 }

@@ -103,13 +103,23 @@ func ReadConfigFiles() (ripErr, librErr, error error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	defer root.Close()
+	defer func() {
+		if err := root.Close(); err != nil {
+			fmt.Println("Error closing root:", err.Error())
+			return
+		}
+	}()
 
 	configDir, err := root.Open(".")
 	if err != nil {
 		return nil, nil, err
 	}
-	defer configDir.Close()
+	defer func() {
+		if err := configDir.Close(); err != nil {
+			fmt.Println("Error closing config directory:", err.Error())
+			return
+		}
+	}()
 
 	configList, err := configDir.ReadDir(0)
 	if err != nil {

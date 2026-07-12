@@ -71,7 +71,9 @@ var ripCmd = &cobra.Command{
 		}
 
 		pid := c.Process.Pid
-		fmt.Fprintf(cmd.OutOrStdout(), "Process spawned. PID: %d\n", pid)
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Process spawned. PID: %d\n", pid); err != nil {
+			return err
+		}
 		return nil
 	},
 }
@@ -105,7 +107,9 @@ var libCmd = &cobra.Command{
 		}
 
 		pid := c.Process.Pid
-		fmt.Fprintf(cmd.OutOrStdout(), "Process spawned. PID: %d\n", pid)
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Process spawned. PID: %d\n", pid); err != nil {
+			return err
+		}
 		return nil
 	},
 }

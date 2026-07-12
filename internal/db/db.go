@@ -86,8 +86,12 @@ func GetAllRecords() ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
+	defer func() {
+		if err := rows.Close(); err != nil {
+			fmt.Println("Error closing rows:", err.Error())
+			return
+		}
+	}()
 	for rows.Next() {
 		var r Record
 		err := rows.Scan(
@@ -104,7 +108,7 @@ func GetAllRecords() ([]Record, error) {
 			&r.RipLog,
 		)
 		if err != nil {
-			fmt.Printf("Error collecting record from DB: %s", err)
+			fmt.Println("Error collecting record from DB:", err.Error())
 			continue
 		}
 		records = append(records, r)
