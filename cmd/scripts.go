@@ -14,7 +14,7 @@ import (
 var ripEject bool
 var ripTrackSelect bool
 
-var ripCommand = &cobra.Command{
+var ripCmd = &cobra.Command{
 	Use:   "rip <flags> <drv> <movie|show> <season| >",
 	Short: "Start media rip on specified drive.",
 	Args:  cobra.RangeArgs(2, 3),
@@ -76,8 +76,8 @@ var ripCommand = &cobra.Command{
 	},
 }
 
-var librarianCommand = &cobra.Command{
-	Use:   "catalog",
+var libCmd = &cobra.Command{
+	Use:   "lib",
 	Short: "Pulls full catalog of movies, shows, and music from Jellyfin and dumps it into Bookstack.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		librGate := prflt.MasterGate.LibrConfig
@@ -110,9 +110,26 @@ var librarianCommand = &cobra.Command{
 	},
 }
 
+var unlockCmd = &cobra.Command{
+	Use: "unlock <drive number>",
+	Short: "Removes the lock file for the given drive.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		_, err := strconv.Atoi(args[0])
+		if err != nil {
+			return fmt.Errorf("argument needs to be an integer; got %v", args[0])
+		}
+		drv := "sr" + args[0]
+		c := exec.Command("rm -rf /var/lock/media-ripper." + drv + ".lock") // #nosec G204 -- Input validated prior to injection
+		if err := c.Run(); err != nil {
+			return err
+		}
+		return nil
+	},
+}
+
 func init() {
-	ripCommand.Flags().BoolVarP(&ripEject, "eject", "e", false, "eject disc after rip")
-	ripCommand.Flags().BoolVarP(&ripTrackSelect, "track-select", "t", false, "enable select of specific tracks")
-	rootCmd.AddCommand(ripCommand)
-	rootCmd.AddCommand(librarianCommand)
+	ripCmd.Flags().BoolVarP(&ripEject, "eject", "e", false, "eject disc after rip")
+	ripCmd.Flags().BoolVarP(&ripTrackSelect, "track-select", "t", false, "enable select of specific tracks")
+	
+	rootCmd.AddCommand(ripCmd, libCmd, unlockCmd)
 }

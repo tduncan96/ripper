@@ -50,7 +50,7 @@ var createDbRecordCmd = &cobra.Command{
 }
 
 var listRecordsCmd = &cobra.Command{
-	Use:   "list-records",
+	Use:   "records",
 	Short: "List all rip records from the database.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		records, err := db.GetAllRecords()
