@@ -142,7 +142,7 @@ set -uo pipefail
             --argjson total_mv_mb "${STAGE_START_SIZE:-0}" \
             --arg sel_tracks "${SEL_TRACKS:-NONE}" \
             --argjson elapsed_seconds "${elapsed_seconds:-0}" \
-            --arg updated "$(date)" \
+            --arg updated "$now" \
             --argjson updated_epoch "$now" \
             --arg rip_log "$(cat "$LOG")" \
             --argjson exit_code "${EXIT_CODE:-0}" \
