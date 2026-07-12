@@ -2,6 +2,8 @@ name: Build and Deploy ripper
 
 on:
   push:
+    branches:
+      - 'main'
   pull_request:
 
 jobs:
