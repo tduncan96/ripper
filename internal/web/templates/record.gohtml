@@ -2,12 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="/static/logo.svg" type="image/svg+xml">
 <title>Rip Record #{{.RunID}}</title>
 <style>
   body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #e0e0e0; margin: 2rem; }
   a { color: #9ab; }
   h1 { margin-bottom: 0.25rem; }
   .sub { color: #888; margin-top: 0; }
+  .header { display: flex; align-items: center; gap: 0.75rem; }
+  .header img { width: 40px; height: 40px; }
+  .header h1 { margin: 0; }
   .grid { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1.25rem; max-width: 640px; margin: 1.5rem 0; }
   .grid dt { color: #9ab; font-weight: 600; }
   .grid dd { margin: 0; word-break: break-all; }
@@ -19,7 +23,7 @@
 </head>
 <body>
 <p><a href="/records">&larr; All Records</a></p>
-<h1>{{if .Title}}{{.Title}}{{else}}Record #{{.RunID}}{{end}}</h1>
+<div class="header"><img src="/static/logo.svg" alt="Ripper"><h1>{{if .Title}}{{.Title}}{{else}}Record #{{.RunID}}{{end}}</h1></div>
 <p class="sub">Run #{{.RunID}}</p>
 
 <dl class="grid">
@@ -31,8 +35,8 @@
   <dt>Raw Title</dt><dd>{{.RawTitle}}</dd>
   <dt>Device</dt><dd>{{.Device}}</dd>
   <dt>Destination</dt><dd>{{.Destination}}</dd>
-  <dt>Total Rip</dt><dd>{{.TotalRipMB}} MB</dd>
-  <dt>Total Move</dt><dd>{{.TotalMvMB}} MB</dd>
+  <dt>Total Ripped</dt><dd>{{.TotalRipMB}} MB</dd>
+  <dt>Total Moved</dt><dd>{{.TotalMvMB}} MB</dd>
 </dl>
 
 <h2>Logs</h2>

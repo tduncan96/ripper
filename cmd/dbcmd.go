@@ -67,8 +67,8 @@ var listRecordsCmd = &cobra.Command{
 		for _, r := range records {
 			if _, err := fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%d\t%d\n",
 				r.RunID, r.StartTime, r.Title, r.Device, r.ExitCode, r.TotalRipMB); err != nil {
-					return err
-				}
+				return err
+			}
 		}
 		return w.Flush()
 	},

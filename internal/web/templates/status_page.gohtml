@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="refresh" content="1">
+    <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
     <script src="/static/htmx.min.js"></script>
     <title>Rip Status</title>
         <style>
@@ -87,9 +88,18 @@
             color: #666;
             font-style: italic;
         }
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .header img { width: 32px; height: 32px; }
+        .header h1 { margin: 0; font-size: 1.3rem; }
         </style>
     </head>
     <body>
+        <div class="header"><img src="/static/logo.svg" alt="Ripper"><h1>Rip Status</h1></div>
         {{range .}}
         <div class="drive">
             <h3>

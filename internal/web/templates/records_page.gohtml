@@ -2,9 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="/static/logo.svg" type="image/svg+xml">
 <title>Rip Records</title>
 <style>
   body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #e0e0e0; margin: 2rem; }
+  .header { display: flex; align-items: center; gap: 0.75rem; }
+  .header img { width: 40px; height: 40px; }
   table { border-collapse: collapse; width: 100%; }
   th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #333; }
   th { color: #9ab; }
@@ -15,7 +18,7 @@
 </style>
 </head>
 <body>
-<h1>Rip Records</h1>
+<div class="header"><img src="/static/logo.svg" alt="Ripper"><h1>Rip Records</h1></div>
 <table>
   <thead>
     <tr><th>ID</th><th>Start</th><th>End</th><th>Title</th><th>Device</th><th>Exit</th><th>Rip MB</th><th>Move MB</th></tr>
@@ -31,7 +34,6 @@
       <td class="{{if eq .ExitCode 0}}ok{{else}}fail{{end}}">{{.ExitCode}}</td>
       <td>{{.TotalRipMB}}</td>
       <td>{{.TotalMvMB}}</td>
-      <td>
     </tr>
     {{else}}
     <tr><td colspan="8">No records yet.</td></tr>

@@ -164,7 +164,7 @@ set -uo pipefail
                 total_mv_mb: $total_mv_mb,
                 sel_tracks: $sel_tracks,
                 elapsed_seconds: $elapsed_seconds,
-                updated: $updated,
+                updated: ($updated | todate),
                 updated_epoch: $updated_epoch,
                 rip_log: $rip_log,
                 exit_code: $exit_code
