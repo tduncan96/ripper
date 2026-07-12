@@ -102,7 +102,7 @@ var libCmd = &cobra.Command{
 
 		c := exec.Command(script, librArgs...) // #nosec G204 -- script dir is a trusted constant; numeric/enum args validated; exec uses no shell
 
-		if err := c.Run(); err != nil {
+		if err := c.Start(); err != nil {
 			return fmt.Errorf("media cataloging failed during initialization: %w", err)
 		}
 
@@ -123,7 +123,7 @@ var unlockCmd = &cobra.Command{
 			return fmt.Errorf("argument needs to be an integer; got %v", args[0])
 		}
 		drv := "sr" + args[0]
-		c := exec.Command("rm -rf /var/lock/media-ripper." + drv + ".lock") // #nosec G204 -- Input validated prior to injection
+		c := exec.Command("rm", "-f", "/var/lock/media-ripper." + drv + ".lock") // #nosec G204 -- Input validated prior to injection
 		if err := c.Run(); err != nil {
 			return err
 		}

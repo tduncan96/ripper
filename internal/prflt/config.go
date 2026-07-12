@@ -57,7 +57,7 @@ func (c *Config) validate() (ripError, librError error) {
 		ripMissing = append(ripMissing, "NTFY_URL")
 	}
 	if c.RipConfig.RipDbPath == "" {
-		c.RipConfig.RipDbPath = "/opt/ripper"
+		c.RipConfig.RipDbPath = "/opt/ripper/ripper.db"
 	}
 
 	if len(ripMissing) > 0 {
