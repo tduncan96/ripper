@@ -123,7 +123,7 @@ var unlockCmd = &cobra.Command{
 			return fmt.Errorf("argument needs to be an integer; got %v", args[0])
 		}
 		drv := "sr" + args[0]
-		c := exec.Command("rm", "-f", "/var/lock/media-ripper." + drv + ".lock") // #nosec G204 -- Input validated prior to injection
+		c := exec.Command("rm", "-f", "/var/lock/media-ripper."+drv+".lock") // #nosec G204 -- Input validated prior to injection
 		if err := c.Run(); err != nil {
 			return err
 		}

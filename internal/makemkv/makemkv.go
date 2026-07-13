@@ -54,7 +54,7 @@ type Disc struct {
 }
 
 func Info(dev string) ([]byte, error) {
-	return exec.Command("makemkvcon", "-r", "info", "dev:"+dev).CombinedOutput()
+	return exec.Command("makemkvcon", "-r", "info", "dev:"+dev).CombinedOutput() // #nosec G204 -- Input validated prior to injection
 }
 
 func ParseInfo(b []byte) (disc Disc, err error) {
@@ -72,12 +72,12 @@ func ParseInfo(b []byte) (disc Disc, err error) {
 
 	titleInd := slices.IndexFunc(lines, func(l string) bool { return discRe.MatchString(l) })
 	if titleInd == -1 {
-		errs = append(errs, fmt.Errorf("No title line from MakeMKV Info!"))
+		errs = append(errs, fmt.Errorf("no title line from MakeMKV Info"))
 		title = "ERROR"
 	} else {
 		titleLine := discRe.FindStringSubmatch(lines[titleInd])
 		if titleLine == nil {
-			errs = append(errs, fmt.Errorf("Invalid title from MakeMKV Info!"))
+			errs = append(errs, fmt.Errorf("invalid title from MakeMKV Info"))
 			title = "ERROR"
 		} else {
 			title = discTitleRe.ReplaceAllString(titleLine[1], "")
@@ -182,8 +182,8 @@ func (d *Disc) SetDests() (err error) {
 		return err
 	}
 	defer func() {
-		if err := stagingRoot.Close(); err != nil {
-			err = fmt.Errorf("error closing staging root dir!")
+		if cErr := stagingRoot.Close(); err != nil {
+			err = fmt.Errorf("error closing staging root dir: %w", cErr)
 		}
 	}()
 	permRoot, err := os.OpenRoot(prflt.MasterConfig.RipConfig.Permanent)
@@ -191,8 +191,8 @@ func (d *Disc) SetDests() (err error) {
 		return err
 	}
 	defer func() {
-		if err := permRoot.Close(); err != nil {
-			err = fmt.Errorf("error closing permanent root dir!")
+		if cErr := permRoot.Close(); err != nil {
+			err = fmt.Errorf("error closing permanent root dir: %w", cErr)
 		}
 	}()
 
@@ -204,7 +204,7 @@ func (d *Disc) SetDests() (err error) {
 	if err != nil {
 		return err
 	}
-	
+
 	d.Staging = filepath.Join(stagingRoot.Name(), relPath)
 	d.Perm = filepath.Join(permRoot.Name(), relPath)
 
@@ -212,7 +212,7 @@ func (d *Disc) SetDests() (err error) {
 }
 
 func Make(i int, dev string, dir string) ([]byte, error) {
-	return exec.Command("makemkvcon", "mkv", "dev:"+dev, strconv.Itoa(i), dir).CombinedOutput()
+	return exec.Command("makemkvcon", "mkv", "dev:"+dev, strconv.Itoa(i), dir).CombinedOutput() // #nosec G204 -- Input validated prior to injection
 }
 
 func (d *Disc) Rip() (out []byte, err error) {
