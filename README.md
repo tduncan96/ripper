@@ -60,12 +60,16 @@ the shelf.
 
 ## Status
 
-Mid-migration. The original pipeline lives in `scripts/media-ripper.sh`; the work
-in progress is porting its logic into Go (`internal/makemkv`), leaving bash to
-orchestrate only the streaming hardware commands (`makemkvcon`, `rsync`). The
-end goal is a long-lived daemon that owns rip state and pushes updates to the web
-UI over SSE. See [ROADMAP.md](ROADMAP.md) for the full plan and the decisions
-behind it.
+Mid-migration. The original pipeline lives in `scripts/media-ripper.sh`, and
+that's still what runs in production. The rip **data path** is now ported to Go
+(`internal/makemkv`): parse disc info → select tracks → rip each title to its own
+subdir → verify the MKV → promote to the permanent library with a `sha256`
+integrity check on both sides (this replaces the bash `rsync`). What's left is the
+surrounding logic — capacity/contention checks, the MIME/scan gate, and the
+curl/df/du/flock helpers — plus wiring the Go path into the CLI so it actually
+runs. The end goal is a long-lived daemon that owns rip state and pushes updates
+to the web UI over SSE. See [ROADMAP.md](ROADMAP.md) for the full checklist and the
+decisions behind it.
 
 ## Commands
 

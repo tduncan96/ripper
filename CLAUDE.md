@@ -50,9 +50,15 @@ startup sequence before any command: `prflt.Init()` (load config) →
 - **`internal/makemkv`** — the ported rip pipeline (the active migration target).
   `ParseInfo` turns `makemkvcon -r info` output into a `Disc` of `Track`s
   (parsing `CINFO`/`TINFO` lines by field number, cleaning the title, sorting by
-  disc source order). `Disc.SetDests`/`Rip`/`Promote` handle staging→permanent.
-  Track auto-selection lives in `Rip`: largest track for a movie, an anchor-band
-  around the second-largest for a show. `Promote` and `Mime` are stubs.
+  disc source order). The data path is complete: `Disc.setDests` resolves
+  staging/permanent dirs, `Disc.Rip` auto-selects tracks (largest for a movie, an
+  anchor-band around the second-largest for a show; an explicit `SelTracks` list
+  overrides), drives per-track `makemkvcon mkv`, and `verify`s each MKV by magic
+  bytes + minimum size. `promote` then does the staging→permanent move itself — a
+  streaming buffered copy across filesystems with a `sha256` integrity check read
+  back on both sides (this replaces the bash `rsync`). **Not yet wired:** nothing
+  invokes this path — `ripper rip` still execs `media-ripper.sh` (see below). The
+  `Mime` scan/allowlist is still a stub. See `ROADMAP.md` for what remains.
 
 - **`internal/db`** — sqlite via a package-global `RipRecordDB *sql.DB` set once
   in `main`. `schema.sql` is `go:embed`ded and applied on every `Init`

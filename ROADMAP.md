@@ -4,9 +4,11 @@ Converting `scripts/media-ripper.sh` from a bash-orchestrated pipeline into Go,
 in two stages:
 
 1. **This pass — extract logic.** Move all computation / data-shaping out of bash
-   into native Go functions. Bash keeps orchestration plus the two streaming
-   hardware commands (`makemkvcon`, `rsync`). One-shot external tools stay in bash
-   for now.
+   into native Go functions. Originally bash was to keep the two streaming commands
+   (`makemkvcon`, `rsync`); in practice the Go rip path went further — it drives
+   `makemkvcon` directly and replaced `rsync` with a verified in-Go copy. One-shot
+   external tools (`clamdscan`, `eject`, `udevadm`, `smart_check`) stay in bash for
+   now. The ported path is written but not yet wired into the CLI (see Integration).
 2. **Next — daemon.** A long-lived server owns state and runs a goroutine per rip.
    The CLI becomes a thin client that talks to the server over a unix socket. The
    server drives `makemkvcon`/`rsync` via `exec`, holds status in memory, and
@@ -85,33 +87,49 @@ Go-native equivalent stay as external process calls.
 
 ### Bucket A — pure logic → native Go (no external process)
 
-- [ ] `ParseInfo(r io.Reader) (Disc, error)` — track parsing (bash 435–504)
-- [ ] `CleanTitle(raw string) string` — strip SEASON/DISC, titlecase (409–411)
-- [ ] `DestRel(title string, season int) string` — season 0 ⇒ movie (415–418)
-- [ ] `Select(tracks []Track, opts) ([]int, totalMB)` — default anchor-band /
-      largest, `-t` override, size estimate (509–564)
+- [x] `ParseInfo` — track parsing → `internal/makemkv/parse.go`.
+- [x] title cleaning — folded into `ParseInfo` (strip SEASON/DISC, titlecase).
+- [x] dest-path derivation — `Disc.setDests` (Movie vs `Show/Season N`).
+- [x] track selection — anchor-band / largest in `Disc.Rip`; an explicit
+      `SelTracks` list overrides (the data-level `-t` hook).
+- [x] episode naming / rename — folded into `Disc.Rip` (offset scan +
+      per-track dirs). The old `PlanRename` / source-order mapping is deleted,
+      not ported — the per-track dirs made it moot.
 - [ ] `contention` over `[]Status` — `reserved_by_others` + `sibling_in_starting`
-      (174–216)
-- [ ] `capacity` — need-vs-avail math (578–603)
-- [ ] index resolution — parse `DRV:` lines → device↔disc index (381–405)
-- [ ] `mimeAllowed(mime string) bool` — scan allowlist (787–809)
-- [ ] `PlanRename(files, tracks, season, offset) []Move` — sort/episode naming
-      (694–775); now trivial thanks to per-track rip dirs
-- [ ] runtime calc + log export helpers (exit_handler bits)
+      (174–216).
+- [ ] `capacity` — need-vs-avail math + `.review` eviction wait (578–603, 729–754).
+- [ ] index resolution — parse `DRV:` lines → device↔disc index (381–405).
+      **Decide first:** the `dev:$DEVICE` source may delete this section entirely
+      (see the simplification note at bash 516–524) before it's worth porting.
+- [ ] `mimeAllowed(mime string) bool` + scan orchestration — the `Mime` stub
+      (allowlist/quarantine logic; `clamdscan` itself stays external) (938–999).
+- [ ] runtime calc + log export helpers (exit_handler bits, 156–219).
 
 ### Bucket B — external but replaceable → do natively in Go
 
 - [ ] `staging_avail` (df) → `syscall.Statfs`
 - [ ] `safe_du` (du) → walk + sum, or `Statfs` delta
-- [ ] makemkv beta key fetch (curl) → `net/http` + `regexp` (219–256)
+- [ ] makemkv beta key fetch (curl) → `net/http` + `regexp` (369–407)
 - [ ] ntfy notifications (curl) → `net/http`
 - [ ] flock → Go file-lock now; in-daemon mutex later
 
 ### Bucket C — genuinely external, stay as `exec` calls
 
-- Streaming, **stay in bash this pass:** `makemkvcon` (info + per-track `mkv`), `rsync`.
+- Streaming: `makemkvcon` (info + per-track `mkv`) is now driven from Go
+  (`Info`/`Make`, called by `Disc.Rip`). **`rsync` is gone** — `promote` does the
+  staging→permanent copy in Go with a streaming sha256 integrity check on both
+  sides. This is ahead of the original "keep streaming in bash" plan; both are now
+  Go-owned execs/IO, ready for the daemon to drive directly.
 - One-shot, **leave in bash until the daemon lands:** `clamdscan`, `eject`,
   `udevadm` (drive-state / fs probe), `sudo smart_check.sh`.
+
+### Integration — not yet wired
+
+The rip data path exists in Go (`ParseInfo → Rip → verify → promote`) but nothing
+invokes it yet: `ripper rip` still `exec`s `media-ripper.sh`, and there's no
+`parse-info` command. **Next step to make the ported logic live:** add the command
+entry points and cut the bash seam over to them (or, given how much is Go-owned now,
+skip straight toward the stage-2 daemon rather than a bash-calls-Go interim).
 
 ### Deferred to the daemon step (do NOT convert now)
 
