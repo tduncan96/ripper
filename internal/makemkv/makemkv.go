@@ -1,11 +1,12 @@
 package makemkv
 
 import (
-	"bufio"
 	"bytes"
 	"cmp"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -14,161 +15,22 @@ import (
 	"ripper/internal/prflt"
 	"slices"
 	"strconv"
-	"strings"
 )
 
 var (
-	trackRe     = regexp.MustCompile(`^TINFO:([0-9]+),([0-9]+),0,\"(.+)\"`)
-	discRe      = regexp.MustCompile(`^CINFO:32,0,\"(.+)\"`)
-	discTitleRe = regexp.MustCompile(`(?i)[._ -]+(SEASON|S|DISC|D|WW|BOOK|VOLUME)[._ -]*[0-9]+([._ -]*(DISC|D)[._ -]*[0-9]+)?[._ -]*$`)
-	spaceRe     = regexp.MustCompile(`[_\s]+`)
-	sourceRe    = regexp.MustCompile(`([0-9]+)\.(?:mpls|m2ts)`)
-	wordRe      = regexp.MustCompile(`(^| )([a-z])`)
+	epRe     = regexp.MustCompile(`S[0-9]+E\K[0-9]+`)
+	mkvMagic = []byte{0x1a, 0x45, 0xdf, 0xa3}
 )
-
-type Track struct {
-	ID        int    `json:"id"`         // X
-	Title     string `json:"title"`      // TINFO:X,2
-	Duration  string `json:"duration"`   // TINFO:X,9
-	SizeHuman string `json:"size_human"` // TINFO:X,10
-	Bytes     int64  `json:"bytes"`      // TINFO:X,11
-	Source    string `json:"source"`     // BR -> TINFO:X,16 | DVD -> TINFO:X,24
-	Segments  string `json:"segments"`   // TINFO:X,26
-	FileName  string `json:"file_name"`  // TINFO:X,27
-	TreeName  string `json:"tree_name"`  // TINFO:X,30
-	Order     int    `json:"order"`
-	Status    bool   `json:"status"`
-}
-
-type Disc struct {
-	Title      string   `json:"title"`
-	Device     string   `json:"device"`
-	Media      string   `json:"media"`
-	Season     int      `json:"season"`
-	Tracks     []*Track `json:"tracks"`
-	SelTracks  []int    `json:"sel_tracks"`
-	TotalBytes int64    `json:"total_bytes"`
-	Staging    string   `json:"staging"`
-	Perm       string   `json:"perm"`
-	Status     bool     `json:"status"`
-}
 
 func Info(dev string) ([]byte, error) {
 	return exec.Command("makemkvcon", "-r", "info", "dev:"+dev).CombinedOutput() // #nosec G204 -- Input validated prior to injection
 }
 
-func ParseInfo(b []byte) (disc Disc, err error) {
-	var lines []string
-	scanner := bufio.NewScanner(bytes.NewReader(b))
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-	if err = scanner.Err(); err != nil {
-		return disc, err
-	}
-
-	var errs []error
-	var title string
-
-	titleInd := slices.IndexFunc(lines, func(l string) bool { return discRe.MatchString(l) })
-	if titleInd == -1 {
-		errs = append(errs, fmt.Errorf("no title line from MakeMKV Info"))
-		title = "ERROR"
-	} else {
-		titleLine := discRe.FindStringSubmatch(lines[titleInd])
-		if titleLine == nil {
-			errs = append(errs, fmt.Errorf("invalid title from MakeMKV Info"))
-			title = "ERROR"
-		} else {
-			title = discTitleRe.ReplaceAllString(titleLine[1], "")
-			title = spaceRe.ReplaceAllString(title, " ")
-			title = strings.TrimSpace(title)
-			title = strings.ToLower(title)
-			title = wordRe.ReplaceAllStringFunc(title, strings.ToUpper)
-		}
-	}
-
-	disc.Title = title
-
-	lines = slices.DeleteFunc(lines, func(l string) bool { return !trackRe.MatchString(l) })
-	for _, line := range lines {
-		matches := trackRe.FindStringSubmatch(line)
-
-		id, err := strconv.Atoi(matches[1])
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-
-		trackInd := slices.IndexFunc(disc.Tracks, func(t *Track) bool { return t.ID == id })
-
-		if trackInd == -1 {
-			disc.Tracks = append(disc.Tracks, &Track{ID: id})
-			trackInd = len(disc.Tracks) - 1
-		}
-		track := disc.Tracks[trackInd]
-
-		field, err := strconv.Atoi(matches[2])
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-
-		switch field {
-		case 2:
-			track.Title = matches[3]
-		case 9:
-			track.Duration = matches[3]
-		case 10:
-			track.SizeHuman = matches[3]
-		case 11:
-			b, err := strconv.Atoi(matches[3])
-			if err != nil {
-				errs = append(errs, err)
-				continue
-			}
-			track.Bytes = int64(b)
-		case 16:
-			track.Source = matches[3]
-			if m := sourceRe.FindStringSubmatch(matches[3]); m != nil {
-				order, err := strconv.Atoi(m[1])
-				if err != nil {
-					errs = append(errs, err)
-				}
-				track.Order = order
-			}
-		case 24:
-			if track.Source == "" {
-				track.Source = matches[3]
-				order, err := strconv.Atoi(matches[3])
-				if err != nil {
-					errs = append(errs, err)
-					continue
-				}
-				track.Order = order
-			}
-		case 26:
-			track.Segments = matches[3]
-		case 27:
-			track.FileName = matches[3]
-		case 30:
-			track.TreeName = matches[3]
-		}
-	}
-
-	slices.SortStableFunc(disc.Tracks, func(a, b *Track) int { return cmp.Compare(a.Order, b.Order) })
-	for i, track := range disc.Tracks {
-		track.Order = i
-	}
-
-	for _, track := range disc.Tracks {
-		disc.TotalBytes += track.Bytes
-	}
-
-	return disc, errors.Join(errs...)
+func Make(i int, dev string, dir string) ([]byte, error) {
+	return exec.Command("makemkvcon", "mkv", "dev:"+dev, strconv.Itoa(i), dir).CombinedOutput() // #nosec G204 -- Input validated prior to injection
 }
 
-func (d *Disc) SetDests() (err error) {
+func (d *Disc) setDests() (err error) {
 	var relPath string
 	switch d.Media {
 	case "Movie":
@@ -211,24 +73,117 @@ func (d *Disc) SetDests() (err error) {
 	return err
 }
 
-func Make(i int, dev string, dir string) ([]byte, error) {
-	return exec.Command("makemkvcon", "mkv", "dev:"+dev, strconv.Itoa(i), dir).CombinedOutput() // #nosec G204 -- Input validated prior to injection
+func verify(root *os.Root, fileName string) error {
+	file, err := root.Open(fileName)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cErr := file.Close(); err != nil {
+			err = cErr
+		}
+	}()
+
+	buf := make([]byte, 512)
+	n, err := file.Read(buf)
+	if err != nil && err != io.EOF {
+		return err
+	}
+	buf = buf[:n]
+
+	if len(buf) < 5 {
+		return fmt.Errorf("file length too short: %d", len(buf))
+	}
+
+	if !bytes.HasPrefix(buf, mkvMagic) {
+		return fmt.Errorf("file has incorrect file signature in header; expected %v, got %v", mkvMagic, buf[:4])
+	}
+
+	info, err := os.Stat(filepath.Join(root.Name(), fileName))
+	if err != nil {
+		return err
+	}
+	if info.Size() < 1<<25 {
+		return fmt.Errorf("file too small: %d", info.Size())
+	}
+
+	return nil
+}
+
+func promote(staging, perm *os.Root, name string) (err error) {
+	in, err := staging.Open(name)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := perm.Create(name)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cErr := out.Close(); cErr != nil {
+			err = cErr
+		}
+	}()
+
+	srcHash := sha256.New()
+	tee := io.TeeReader(in, srcHash)
+
+	buf := make([]byte, 1<<20)
+	if _, err := io.CopyBuffer(out, tee, buf); err != nil {
+		return err
+	}
+	if err := out.Sync(); err != nil {
+		return err
+	}
+
+	check, err := perm.Open(name)
+	if err != nil {
+		return err
+	}
+	defer check.Close()
+
+	dstHash := sha256.New()
+	if _, err := io.Copy(dstHash, check); err != nil {
+		return err
+	}
+
+	if !bytes.Equal(srcHash.Sum(nil), dstHash.Sum(nil)) {
+		return fmt.Errorf("checksum mismatch while promoting %s", name)
+	}
+
+	if err := staging.Remove(name); err != nil {
+		return fmt.Errorf("failed clean up while promoting %s: %w", name, err)
+	}
+
+	return nil
 }
 
 func (d *Disc) Rip() (out []byte, err error) {
 	var errs []error
 
-	if err := d.SetDests(); err != nil {
+	if err := d.setDests(); err != nil {
 		return out, err
 	}
 
-	root, err := os.OpenRoot(d.Staging)
+	staging, err := os.OpenRoot(d.Staging)
 	if err != nil {
 		return out, err
 	}
 	defer func() {
-		if cErr := root.Close(); cErr != nil {
+		if cErr := staging.Close(); cErr != nil {
 			errs = append(errs, fmt.Errorf("error closing root: %w", cErr))
+		}
+	}()
+
+	perm, err := os.OpenRoot(d.Perm)
+	if err != nil {
+		return out, err
+	}
+	defer func() {
+		if cErr := perm.Close(); cErr != nil {
+			errs = append(errs, cErr)
 		}
 	}()
 
@@ -241,7 +196,7 @@ func (d *Disc) Rip() (out []byte, err error) {
 		case "Show":
 			anchor := sizeSort[len(sizeSort)-2].Bytes
 			for _, track := range d.Tracks {
-				if track.Bytes < anchor*130/100 || track.Bytes > anchor*70/100 {
+				if track.Bytes < anchor*130/100 && track.Bytes > anchor*70/100 {
 					d.SelTracks = append(d.SelTracks, track.ID)
 				}
 			}
@@ -250,31 +205,86 @@ func (d *Disc) Rip() (out []byte, err error) {
 
 	tracks := slices.Clone(d.Tracks)
 	tracks = slices.DeleteFunc(tracks, func(t *Track) bool { return !slices.Contains(d.SelTracks, t.ID) })
-	for _, track := range tracks {
-		errCount := len(errs)
-		dir := strconv.Itoa(track.Order)
-		err = root.Mkdir(dir, 0o700)
-		if errors.Is(err, fs.ErrExist) {
-			dir = fmt.Sprintf("%d_%d", track.ID, track.Order)
-			err = root.Mkdir(dir, 0o700)
+
+	var offset int
+	if d.Media == "Show" {
+		stagingDirs, err := fs.ReadDir(staging.FS(), ".")
+		if err != nil {
+			return out, err
 		}
+
+		for _, dir := range stagingDirs {
+			if dir.IsDir() {
+				id, err := strconv.Atoi(dir.Name())
+				if err != nil {
+					continue
+				}
+				tracks = slices.DeleteFunc(tracks, func(t *Track) bool { return t.ID == id })
+			}
+		}
+
+		permFiles, err := fs.ReadDir(perm.FS(), ".")
+		if err != nil {
+			return out, err
+		}
+
+		for _, file := range permFiles {
+			if !file.IsDir() {
+				continue
+			}
+			ep, err := strconv.Atoi(epRe.FindStringSubmatch(file.Name())[0])
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			if ep > offset {
+				offset = ep
+			}
+		}
+	}
+
+	for _, track := range tracks {
+		track.Status = true
+		dir := strconv.Itoa(track.ID)
+		err = staging.MkdirAll(dir, 0o700)
 		if err != nil {
 			errs = append(errs, err)
+			track.Status = false
 			continue
 		}
 
-		path := filepath.Join(root.Name(), dir)
+		path := filepath.Join(staging.Name(), dir)
 		trackOut, err := Make(track.ID, d.Device, path)
-		if err != nil {
-			errs = append(errs, err)
-		}
-
-		divString := fmt.Sprintf("\n===== Track %v || Order %v =====\n", track.ID, track.Order)
+		divString := fmt.Sprintf("\n======== Track %v || Order %v ========\n", track.ID, track.Order)
 		out = append(out, []byte(divString)...)
 		out = append(out, trackOut...)
+		if err != nil {
+			errs = append(errs, err)
+			track.Status = false
+			continue
+		}
 
-		if len(errs) == errCount {
-			track.Status = true
+		if err := verify(staging, filepath.Join(dir, track.FileName)); err != nil {
+			errs = append(errs, err)
+			track.Status = false
+			continue
+		}
+		verify := fmt.Sprintf("file %v verified; renaming", track.FileName)
+		out = append(out, []byte(verify)...)
+
+		newName := fmt.Sprintf("%v S%dE%d", d.Title, d.Season, offset+track.Order)
+		if err := staging.Rename(filepath.Join(dir, track.FileName), newName); err != nil {
+			errs = append(errs, err)
+			track.Status = false
+			continue
+		}
+		track.FileName = newName
+		rename := fmt.Sprintf("file %v renamed to %v", track.FileName, newName)
+		out = append(out, []byte(rename)...)
+
+		if err := promote(staging, perm, track.FileName); err != nil {
+			errs = append(errs, err)
+			track.Status = false
 		}
 	}
 
@@ -285,25 +295,11 @@ func (d *Disc) Rip() (out []byte, err error) {
 		}
 	}
 
-	return out, errors.Join(errs...)
-}
-
-func Mime(root os.Root) error {
-
-	return nil
-}
-
-func (d *Disc) Promote() (err error) {
-	var errs []error
-	stagingRoot, err := os.OpenRoot(d.Staging)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if cErr := stagingRoot.Close(); cErr != nil {
-			errs = append(errs, fmt.Errorf("error closing root: %w", cErr))
+	if d.Status {
+		if rErr := staging.RemoveAll("."); rErr != nil {
+			errs = append(errs, rErr)
 		}
-	}()
+	}
 
-	return nil
+	return out, errors.Join(errs...)
 }

@@ -1,0 +1,87 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+Ripper drives MakeMKV to pull titles off optical discs, sorts them into a
+Jellyfin-friendly library, records each run in SQLite, and serves a status web
+page. Personal project for one media server — no packaging or portable config.
+
+**Read `ROADMAP.md` before touching rip logic.** The project is mid-migration
+from a bash-orchestrated pipeline (`scripts/media-ripper.sh`) to Go
+(`internal/makemkv`). Bash is being reduced to orchestration plus the two
+streaming hardware commands (`makemkvcon`, `rsync`); the end goal is a long-lived
+daemon that owns rip state in memory and pushes to the web UI over SSE. The
+ROADMAP has the stage-1 checklist and the locked-in design decisions (per-track
+rip dirs, anchor-band track selection, etc.) — follow them rather than
+re-deriving.
+
+## Commands
+
+```sh
+go build -o ripper .              # build
+golangci-lint run ./...           # lint (CI gate; only gosec is enabled, see .golangci.yml)
+git ls-files '*.sh' | xargs shellcheck   # lint bash (CI gate)
+go test ./...                     # no tests exist yet
+```
+
+CI (`.gitea/workflows/lint-build-deploy.yaml`) runs shellcheck + golangci-lint on
+every push, and on `main` cross-compiles (`CGO_ENABLED=0 GOOS=linux GOARCH=amd64`)
+and scp/ssh-deploys the binary, scripts, and systemd unit to the media server.
+The sqlite driver is `modernc.org/sqlite` (pure Go) specifically so `CGO_ENABLED=0`
+works.
+
+## Architecture
+
+Cobra CLI (`cmd/`) over a set of `internal/` packages. `main.go` runs a fixed
+startup sequence before any command: `prflt.Init()` (load config) →
+`db.Init()` (open sqlite, apply schema) → `cmd.Execute()`.
+
+- **`internal/prflt`** — config + gating. `ReadConfigFiles` reads every file in
+  `/etc/ripper/` (`rip.env`, `libr.env`) into the global `MasterConfig`, fills
+  defaults, and produces two independent errors (rip side, librarian side).
+  Those errors are stored in the global `MasterGate`. **Gating pattern:** each
+  command checks `prflt.MasterGate.RipConfig` / `.LibrConfig` at the top of its
+  `RunE` and returns it if non-nil — so a misconfigured librarian never blocks
+  ripping and vice versa. Config paths (`/etc/ripper`, `/usr/local/libexec`) are
+  hardcoded constants.
+
+- **`internal/makemkv`** — the ported rip pipeline (the active migration target).
+  `ParseInfo` turns `makemkvcon -r info` output into a `Disc` of `Track`s
+  (parsing `CINFO`/`TINFO` lines by field number, cleaning the title, sorting by
+  disc source order). `Disc.SetDests`/`Rip`/`Promote` handle staging→permanent.
+  Track auto-selection lives in `Rip`: largest track for a movie, an anchor-band
+  around the second-largest for a show. `Promote` and `Mime` are stubs.
+
+- **`internal/db`** — sqlite via a package-global `RipRecordDB *sql.DB` set once
+  in `main`. `schema.sql` is `go:embed`ded and applied on every `Init`
+  (idempotent). One table, `Runs`. Every CLI invocation opens the DB today; the
+  daemon will become the single writer (see ROADMAP).
+
+- **`internal/web`** — `ripper serve` on `:9511`. Templates and static assets
+  (htmx, logo) are `go:embed`ded. The status page currently uses a `<meta refresh>`
+  full-page reload; SSE is roadmapped.
+
+### The bash↔Go seam (important)
+
+The rip **status JSON file** is the IPC contract between the two worlds. The bash
+script writes per-drive status to `STATUS_TMP` (a glob like `/tmp/*.rip-status.json`);
+`internal/web` reads and unmarshals those files into `Status` structs to render
+the page (`getCurrentStatuses`), and `ripper record` reads one to persist a `Record`
+to the DB at rip exit. The `Status` struct's json tags must stay in sync with what
+the bash script writes.
+
+`ripper rip` and `ripper lib` don't do the work themselves — they validate args,
+then `exec.Command(...).Start()` the corresponding shell script (detached, so it
+survives a `serve` restart) passing config as positional args in a fixed order.
+If you change the argument order in `cmd/scripts.go`, change it in the script too.
+
+### Conventions to match
+
+- Filesystem access is sandboxed with `os.OpenRoot` + root-relative operations
+  (`root.MkdirAll`, `fs.ReadFile(root.FS(), …)`) rather than raw `os` paths —
+  keep new filesystem code in that style.
+- `exec.Command` calls that shell out carry a `// #nosec G204` comment justifying
+  why the input is safe (validated numeric/enum args, trusted constant dirs).
+  gosec is the only enabled linter, so preserve these when editing.
