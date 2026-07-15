@@ -26,7 +26,7 @@ type Track struct {
 	Title     string `json:"title"`      // TINFO:X,2
 	Duration  string `json:"duration"`   // TINFO:X,9
 	SizeHuman string `json:"size_human"` // TINFO:X,10
-	Bytes     int64  `json:"bytes"`      // TINFO:X,11
+	Bytes     uint64 `json:"bytes"`      // TINFO:X,11
 	Source    string `json:"source"`     // BR -> TINFO:X,16 | DVD -> TINFO:X,24
 	Segments  string `json:"segments"`   // TINFO:X,26
 	FileName  string `json:"file_name"`  // TINFO:X,27
@@ -42,7 +42,7 @@ type Disc struct {
 	Season     int      `json:"season"`
 	Tracks     []*Track `json:"tracks"`
 	SelTracks  []int    `json:"sel_tracks"`
-	TotalBytes int64    `json:"total_bytes"`
+	TotalBytes uint64   `json:"total_bytes"`
 	Staging    string   `json:"staging"`
 	Perm       string   `json:"perm"`
 	Status     bool     `json:"status"`
@@ -118,7 +118,7 @@ func ParseInfo(b []byte) (disc Disc, err error) {
 				errs = append(errs, err)
 				continue
 			}
-			track.Bytes = int64(b)
+			track.Bytes = uint64(b)
 		case 16:
 			track.Source = matches[3]
 			if m := sourceRe.FindStringSubmatch(matches[3]); m != nil {
