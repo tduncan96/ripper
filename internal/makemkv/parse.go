@@ -118,7 +118,7 @@ func ParseInfo(b []byte) (disc Disc, err error) {
 				errs = append(errs, err)
 				continue
 			}
-			track.Bytes = uint64(b)
+			track.Bytes = uint64(b) // #nosec G115 -- File size cannot be negative.
 		case 16:
 			track.Source = matches[3]
 			if m := sourceRe.FindStringSubmatch(matches[3]); m != nil {

@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	epRe     = regexp.MustCompile(`S[0-9]+E\K[0-9]+`)
+	epRe     = regexp.MustCompile(`S[0-9]+E([0-9]+)`)
 	mkvMagic = []byte{0x1a, 0x45, 0xdf, 0xa3}
 )
 
@@ -80,7 +80,7 @@ func promote(staging, perm *os.Root, name string) (err error) {
 	if err != nil {
 		return err
 	}
-	if uint64(fInfo.Size())*11/10 > avail {
+	if uint64(fInfo.Size()*11/10) > avail { // #nosec G115 -- File size cannot be negative.
 		return fmt.Errorf("insufficient space available in permanent space; avail: %d, need: %d", avail, fInfo.Size())
 	}
 

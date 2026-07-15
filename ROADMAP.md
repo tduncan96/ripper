@@ -97,7 +97,20 @@ Go-native equivalent stay as external process calls.
       not ported — the per-track dirs made it moot.
 - [ ] `contention` over `[]Status` — `reserved_by_others` + `sibling_in_starting`
       (174–216).
-- [ ] `capacity` — need-vs-avail math + `.review` eviction wait (578–603, 729–754).
+- [~] `capacity` — **partially done, reshaped from the bash design.** Ported as a
+      per-track guard in `Disc.Rip` (not a whole-disc pre-check): before each track,
+      `sysstat.AvailBytes` vs `track.Bytes * 11/10` (10% headroom), fail the track if
+      short. Rationale: `promote` drains staging per track, so peak staging use is
+      ~one track, never the whole disc — the bash `NEEDED = TOTAL_MB * 11/10`
+      whole-disc reservation was over-conservative. The "need" now comes from parsed
+      `Track.Bytes` (exact), not `du`/`TOTAL_MB` (which truncated per-title).
+      **Deliberately dropped, not deferred:** the `reserved_by_others` reservation
+      math — staging (~100 GB) vs max real track (~40 GB) means two concurrent rips
+      fit, so the cross-drive TOCTOU race is harmless; the daemon's in-memory state
+      closes it properly later anyway. **Skipped for now (may revisit):** the
+      `.review` eviction wait (578–603) — trialing whether staging drains on its own
+      given the tighter per-track footprint; without it, a space-short track just
+      fails instead of evicting.
 - [ ] index resolution — parse `DRV:` lines → device↔disc index (381–405).
       **Decide first:** the `dev:$DEVICE` source may delete this section entirely
       (see the simplification note at bash 516–524) before it's worth porting.
@@ -107,8 +120,12 @@ Go-native equivalent stay as external process calls.
 
 ### Bucket B — external but replaceable → do natively in Go
 
-- [ ] `staging_avail` (df) → `syscall.Statfs`
-- [ ] `safe_du` (du) → walk + sum, or `Statfs` delta
+- [x] `staging_avail` (df) → `sysstat.AvailBytes` (`golang.org/x/sys/unix.Statfs`,
+      `Bavail * Bsize`, returns bytes). Lives in new `internal/sysstat`.
+- [ ] `safe_du` (du) → walk + sum. **Not needed by the rip path** — the capacity
+      guard uses `Statfs` (free space) + parsed `Track.Bytes` (need), never a
+      recursive dir size. Port only if the librarian (`STAGE_START_SIZE`, ~859) needs
+      it. Deferred, not dropped.
 - [ ] makemkv beta key fetch (curl) → `net/http` + `regexp` (369–407)
 - [ ] ntfy notifications (curl) → `net/http`
 - [ ] flock → Go file-lock now; in-daemon mutex later
@@ -166,3 +183,15 @@ streaming commands.**
 - [ ] Replace `<meta http-equiv="refresh" content="1">` with push/patch updates.
       SSE over the existing `net/http` server (fetch-poll `/json` as the quick
       interim). WebSocket only if the browser needs to send commands back.
+- [ ] Live system stats on the status page — staging/permanent free space (and
+      maybe system RAM). Planned as an in-memory `SysStat` cache in `internal/sysstat`:
+      a background goroutine started by `serve` refreshes a mutex-guarded struct on
+      an interval; handlers read it; later it's pushed over SSE (same struct). A
+      natural precursor to the daemon owning state in memory.
+      - **Keep the rip capacity guard on a live `Statfs`, not this cache.** Today
+        `rip` and `serve` are separate processes, so the cache isn't visible to the
+        rip path at all. Even once the daemon merges them, prefer injecting the
+        avail source (a `func() (uint64, error)`) so the guard stays independent of
+        the refresher's health and testable standalone.
+      - **Mem stat is linux-only:** `unix.Sysinfo` doesn't build on darwin, unlike
+        `Statfs`. Needs a `//go:build linux` file + darwin stub when added.

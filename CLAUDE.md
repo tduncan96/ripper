@@ -54,11 +54,23 @@ startup sequence before any command: `prflt.Init()` (load config) →
   staging/permanent dirs, `Disc.Rip` auto-selects tracks (largest for a movie, an
   anchor-band around the second-largest for a show; an explicit `SelTracks` list
   overrides), drives per-track `makemkvcon mkv`, and `verify`s each MKV by magic
-  bytes + minimum size. `promote` then does the staging→permanent move itself — a
-  streaming buffered copy across filesystems with a `sha256` integrity check read
-  back on both sides (this replaces the bash `rsync`). **Not yet wired:** nothing
-  invokes this path — `ripper rip` still execs `media-ripper.sh` (see below). The
-  `Mime` scan/allowlist is still a stub. See `ROADMAP.md` for what remains.
+  bytes + minimum size. Before each track it runs a **per-track staging capacity
+  guard** — `sysstat.AvailBytes` vs `Track.Bytes * 11/10` (10% headroom) — and
+  fails just that track if staging is short (per-track because `promote` drains
+  staging each iteration, so peak use is ~one track; see ROADMAP `capacity` for the
+  reservation/eviction logic deliberately left out). `promote` then does the
+  staging→permanent move itself — a streaming buffered copy across filesystems with
+  a `sha256` integrity check read back on both sides (this replaces the bash
+  `rsync`). Parsing lives in `parse.go`; the rip pipeline in `rip.go`.
+  **Not yet wired:** nothing invokes this path — `ripper rip` still execs
+  `media-ripper.sh` (see below). The `Mime` scan/allowlist is still a stub. See
+  `ROADMAP.md` for what remains.
+
+- **`internal/sysstat`** — thin OS-stat helpers for the rip/UI layers. `AvailBytes`
+  wraps `golang.org/x/sys/unix.Statfs` (`Bavail * Bsize`, returns bytes) for
+  free-space checks. `unix` (not stdlib `syscall`, which is frozen) is the
+  maintained binding; it's a direct dep as of this work. Roadmapped to grow an
+  in-memory `SysStat` cache for the web UI (see ROADMAP Web UI).
 
 - **`internal/db`** — sqlite via a package-global `RipRecordDB *sql.DB` set once
   in `main`. `schema.sql` is `go:embed`ded and applied on every `Init`
