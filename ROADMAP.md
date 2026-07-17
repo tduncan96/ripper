@@ -100,8 +100,10 @@ Go-native equivalent stay as external process calls.
 - [~] `capacity` — **partially done, reshaped from the bash design.** Ported as a
       per-track guard in `Disc.Rip` (not a whole-disc pre-check): before each track,
       `sysstat.AvailBytes` vs `track.Bytes * 11/10` (10% headroom), fail the track if
-      short. Rationale: `promote` drains staging per track, so peak staging use is
-      ~one track, never the whole disc — the bash `NEEDED = TOTAL_MB * 11/10`
+      short. `promote` runs the same 10%-headroom check against the *permanent*
+      filesystem before copying. Rationale: `promote` drains staging per track, so
+      peak staging use is ~one track, never the whole disc — the bash
+      `NEEDED = TOTAL_MB * 11/10`
       whole-disc reservation was over-conservative. The "need" now comes from parsed
       `Track.Bytes` (exact), not `du`/`TOTAL_MB` (which truncated per-title).
       **Deliberately dropped, not deferred:** the `reserved_by_others` reservation
@@ -126,7 +128,10 @@ Go-native equivalent stay as external process calls.
       guard uses `Statfs` (free space) + parsed `Track.Bytes` (need), never a
       recursive dir size. Port only if the librarian (`STAGE_START_SIZE`, ~859) needs
       it. Deferred, not dropped.
-- [ ] makemkv beta key fetch (curl) → `net/http` + `regexp` (369–407)
+- [x] makemkv beta key fetch (curl) → `net/http` + `regexp` — `internal/makemkv/key.go`.
+      `RefreshKey` scrapes the forum page and rewrites `app_Key` in
+      `~/.MakeMKV/settings.conf` (atomic tmp+rename); `KeyExpired` detects the
+      `MSG:5052/5055` expired-key codes in info output. Not yet wired into the CLI.
 - [ ] ntfy notifications (curl) → `net/http`
 - [ ] flock → Go file-lock now; in-daemon mutex later
 
@@ -137,15 +142,20 @@ Go-native equivalent stay as external process calls.
   staging→permanent copy in Go with a streaming sha256 integrity check on both
   sides. This is ahead of the original "keep streaming in bash" plan; both are now
   Go-owned execs/IO, ready for the daemon to drive directly.
+- `udevadm` drive-state probe is now driven from Go too — `sysstat.DriveState`
+  execs `udevadm info --query=property` and checks for `ID_CDROM_MEDIA=1`. The
+  tool stays external; only the orchestration moved.
 - One-shot, **leave in bash until the daemon lands:** `clamdscan`, `eject`,
-  `udevadm` (drive-state / fs probe), `sudo smart_check.sh`.
+  `sudo smart_check.sh`.
 
 ### Integration — not yet wired
 
-The rip data path exists in Go (`ParseInfo → Rip → verify → promote`) but nothing
-invokes it yet: `ripper rip` still `exec`s `media-ripper.sh`, and there's no
-`parse-info` command. **Next step to make the ported logic live:** add the command
-entry points and cut the bash seam over to them (or, given how much is Go-owned now,
+The rip data path exists in Go (`ParseInfo → Rip → verify → promote`), along with
+the beta-key refresh (`key.go`) and the udevadm drive-state probe
+(`sysstat.DriveState`), but nothing invokes any of it yet: `ripper rip` still
+`exec`s `media-ripper.sh`, and there's no `parse-info` command. **Next step to
+make the ported logic live:** add the command entry points and cut the bash seam
+over to them (or, given how much is Go-owned now,
 skip straight toward the stage-2 daemon rather than a bash-calls-Go interim).
 
 ### Deferred to the daemon step (do NOT convert now)

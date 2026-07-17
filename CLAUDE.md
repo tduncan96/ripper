@@ -61,7 +61,11 @@ startup sequence before any command: `prflt.Init()` (load config) →
   reservation/eviction logic deliberately left out). `promote` then does the
   staging→permanent move itself — a streaming buffered copy across filesystems with
   a `sha256` integrity check read back on both sides (this replaces the bash
-  `rsync`). Parsing lives in `parse.go`; the rip pipeline in `rip.go`.
+  `rsync`), and runs the same 10%-headroom capacity guard against the permanent
+  filesystem first. Parsing lives in `parse.go`; the rip pipeline in `rip.go`.
+  `key.go` handles the MakeMKV beta key: `RefreshKey` scrapes the forum page and
+  rewrites `~/.MakeMKV/settings.conf`, `KeyExpired` spots the `MSG:5052/5055`
+  expired-key codes in info output.
   **Not yet wired:** nothing invokes this path — `ripper rip` still execs
   `media-ripper.sh` (see below). The `Mime` scan/allowlist is still a stub. See
   `ROADMAP.md` for what remains.
@@ -69,8 +73,9 @@ startup sequence before any command: `prflt.Init()` (load config) →
 - **`internal/sysstat`** — thin OS-stat helpers for the rip/UI layers. `AvailBytes`
   wraps `golang.org/x/sys/unix.Statfs` (`Bavail * Bsize`, returns bytes) for
   free-space checks. `unix` (not stdlib `syscall`, which is frozen) is the
-  maintained binding; it's a direct dep as of this work. Roadmapped to grow an
-  in-memory `SysStat` cache for the web UI (see ROADMAP Web UI).
+  maintained binding; it's a direct dep as of this work. `DriveState` (`udevadm.go`)
+  execs `udevadm info` and checks `ID_CDROM_MEDIA=1` to confirm a disc is present.
+  Roadmapped to grow an in-memory `SysStat` cache for the web UI (see ROADMAP Web UI).
 
 - **`internal/db`** — sqlite via a package-global `RipRecordDB *sql.DB` set once
   in `main`. `schema.sql` is `go:embed`ded and applied on every `Init`
