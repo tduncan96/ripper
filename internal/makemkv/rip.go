@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -170,6 +171,13 @@ func (d *Disc) setDests() (err error) {
 	return err
 }
 
+func (d *Disc) SelectTracks(sel []int) {
+	d.CherryP = true
+	for _, i := range sel {
+		d.Tracks[i].Selected = true
+	}
+}
+
 func (d *Disc) Rip() (out []byte, err error) {
 	var errs []error
 
@@ -197,24 +205,20 @@ func (d *Disc) Rip() (out []byte, err error) {
 		}
 	}()
 
-	if d.SelTracks == nil {
-		sizeSort := slices.Clone(d.Tracks)
-		slices.SortStableFunc(sizeSort, func(a, b *Track) int { return cmp.Compare(a.Bytes, b.Bytes) })
+	if !d.CherryP {
+		sizeSort := slices.SortedStableFunc(maps.Values(d.Tracks), func(a, b *Track) int { return cmp.Compare(a.Bytes, b.Bytes) })
 		switch d.Media {
 		case "Movie":
-			d.SelTracks = []int{sizeSort[len(sizeSort)-1].ID}
+			d.Tracks[sizeSort[len(sizeSort)-1].ID].Selected = true
 		case "Show":
 			anchor := sizeSort[len(sizeSort)-2].Bytes
 			for _, track := range d.Tracks {
 				if track.Bytes < anchor*130/100 && track.Bytes > anchor*70/100 {
-					d.SelTracks = append(d.SelTracks, track.ID)
+					track.Selected = true
 				}
 			}
 		}
 	}
-
-	tracks := slices.Clone(d.Tracks)
-	tracks = slices.DeleteFunc(tracks, func(t *Track) bool { return !slices.Contains(d.SelTracks, t.ID) })
 
 	var offset int
 	if d.Media == "Show" {
@@ -229,7 +233,9 @@ func (d *Disc) Rip() (out []byte, err error) {
 				if err != nil {
 					continue
 				}
-				tracks = slices.DeleteFunc(tracks, func(t *Track) bool { return t.ID == id })
+				if track, ok := d.Tracks[id]; ok {
+					track.Selected = false
+				}
 			}
 		}
 
@@ -239,7 +245,7 @@ func (d *Disc) Rip() (out []byte, err error) {
 		}
 
 		for _, file := range permFiles {
-			if !file.IsDir() {
+			if file.IsDir() {
 				continue
 			}
 			ep, err := strconv.Atoi(epRe.FindStringSubmatch(file.Name())[0])
@@ -253,7 +259,11 @@ func (d *Disc) Rip() (out []byte, err error) {
 		}
 	}
 
-	for _, track := range tracks {
+	for _, track := range d.Tracks {
+		if !track.Selected {
+			continue
+		}
+
 		track.Status = true
 		avail, err := sysstat.AvailBytes(prflt.MasterConfig.RipConfig.Staging)
 		if err != nil {
@@ -277,7 +287,7 @@ func (d *Disc) Rip() (out []byte, err error) {
 
 		path := filepath.Join(staging.Name(), dir)
 		trackOut, err := Make(track.ID, d.Device, path)
-		divString := fmt.Sprintf("\n======== Track %d || Order %d ========\n", track.ID, track.Order)
+		divString := fmt.Sprintf("\n\n======== Track %d || Order %d ========\n", track.ID, track.Order)
 		out = append(out, []byte(divString)...)
 		out = append(out, trackOut...)
 		if err != nil {
@@ -314,8 +324,8 @@ func (d *Disc) Rip() (out []byte, err error) {
 	}
 
 	d.Status = true
-	for _, track := range tracks {
-		if !track.Status {
+	for _, track := range d.Tracks {
+		if !track.Status && track.Selected {
 			d.Status = false
 		}
 	}

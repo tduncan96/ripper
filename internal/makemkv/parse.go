@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strconv"
@@ -31,21 +32,23 @@ type Track struct {
 	Segments  string `json:"segments"`   // TINFO:X,26
 	FileName  string `json:"file_name"`  // TINFO:X,27
 	TreeName  string `json:"tree_name"`  // TINFO:X,30
+	Selected  bool   `json:"selected"`
 	Order     int    `json:"order"`
 	Status    bool   `json:"status"`
 }
 
 type Disc struct {
-	Title      string   `json:"title"`
-	Device     string   `json:"device"`
-	Media      string   `json:"media"`
-	Season     int      `json:"season"`
-	Tracks     []*Track `json:"tracks"`
-	SelTracks  []int    `json:"sel_tracks"`
-	TotalBytes uint64   `json:"total_bytes"`
-	Staging    string   `json:"staging"`
-	Perm       string   `json:"perm"`
-	Status     bool     `json:"status"`
+	Raw        string         `json:"raw_title"`
+	Title      string         `json:"title"`
+	Device     string         `json:"device"`
+	Media      string         `json:"media"`
+	Season     int            `json:"season"`
+	Tracks     map[int]*Track `json:"tracks"`
+	TotalBytes uint64         `json:"total_bytes"`
+	Staging    string         `json:"staging"`
+	Perm       string         `json:"perm"`
+	CherryP    bool           `json:"cherry_picked"`
+	Status     bool           `json:"status"`
 }
 
 func ParseInfo(b []byte) (disc Disc, err error) {
@@ -65,12 +68,15 @@ func ParseInfo(b []byte) (disc Disc, err error) {
 	if titleInd == -1 {
 		errs = append(errs, fmt.Errorf("no title line from MakeMKV Info"))
 		title = "ERROR"
+		disc.Raw = title
 	} else {
 		titleLine := discRe.FindStringSubmatch(lines[titleInd])
 		if titleLine == nil {
 			errs = append(errs, fmt.Errorf("invalid title from MakeMKV Info"))
 			title = "ERROR"
+			disc.Raw = title
 		} else {
+			disc.Raw = title
 			title = discTitleRe.ReplaceAllString(titleLine[1], "")
 			title = spaceRe.ReplaceAllString(title, " ")
 			title = strings.TrimSpace(title)
@@ -80,10 +86,11 @@ func ParseInfo(b []byte) (disc Disc, err error) {
 	}
 
 	disc.Title = title
+	disc.Tracks = make(map[int]*Track)
 
 	lines = slices.DeleteFunc(lines, func(l string) bool { return !trackRe.MatchString(l) })
 	for _, line := range lines {
-		matches := trackRe.FindStringSubmatch(line)
+		matches := trackRe.FindStringSubmatch(line) //TINFO:(matches[1]),(matches[2]),0,(matches[3])
 
 		id, err := strconv.Atoi(matches[1])
 		if err != nil {
@@ -91,13 +98,11 @@ func ParseInfo(b []byte) (disc Disc, err error) {
 			continue
 		}
 
-		trackInd := slices.IndexFunc(disc.Tracks, func(t *Track) bool { return t.ID == id })
-
-		if trackInd == -1 {
-			disc.Tracks = append(disc.Tracks, &Track{ID: id})
-			trackInd = len(disc.Tracks) - 1
+		track, ok := disc.Tracks[id]
+		if !ok {
+			disc.Tracks[id] = &Track{ID: id}
+			track = disc.Tracks[id]
 		}
-		track := disc.Tracks[trackInd]
 
 		field, err := strconv.Atoi(matches[2])
 		if err != nil {
@@ -147,8 +152,8 @@ func ParseInfo(b []byte) (disc Disc, err error) {
 		}
 	}
 
-	slices.SortStableFunc(disc.Tracks, func(a, b *Track) int { return cmp.Compare(a.Order, b.Order) })
-	for i, track := range disc.Tracks {
+	ordered := slices.SortedStableFunc(maps.Values(disc.Tracks), func(a, b *Track) int { return cmp.Compare(a.Order, b.Order) })
+	for i, track := range ordered {
 		track.Order = i
 	}
 
