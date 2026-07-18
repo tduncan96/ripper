@@ -10,12 +10,14 @@ page. Personal project for one media server — no packaging or portable config.
 
 **Read `ROADMAP.md` before touching rip logic.** The project is mid-migration
 from a bash-orchestrated pipeline (`scripts/media-ripper.sh`) to Go
-(`internal/makemkv`). Bash is being reduced to orchestration plus the two
-streaming hardware commands (`makemkvcon`, `rsync`); the end goal is a long-lived
-daemon that owns rip state in memory and pushes to the web UI over SSE. The
-ROADMAP has the stage-1 checklist and the locked-in design decisions (per-track
-rip dirs, anchor-band track selection, etc.) — follow them rather than
-re-deriving.
+(`internal/makemkv`). Stage-1 logic extraction is essentially done: the Go rip
+path drives `makemkvcon` directly and replaced `rsync` with a verified in-Go
+copy, so bash is down to a few genuinely-external one-shots (`clamdscan`,
+`sudo smart_check.sh`, `eject`) until the Go path is wired into the CLI. The end
+goal is a long-lived daemon that owns rip state in memory and pushes to the web UI
+over SSE. The ROADMAP has the remaining close-out tasks and the locked-in design
+decisions (per-track rip dirs, anchor-band track selection, etc.) — follow them
+rather than re-deriving.
 
 ## Commands
 
@@ -36,24 +38,26 @@ works.
 
 Cobra CLI (`cmd/`) over a set of `internal/` packages. `main.go` runs a fixed
 startup sequence before any command: `prflt.Init()` (load config) →
-`db.Init()` (open sqlite, apply schema) → `cmd.Execute()`.
+`db.Init(RipDbPath)` (open sqlite at the config-driven `RIP_DB_PATH`, apply
+schema) → `cmd.Execute()`.
 
 - **`internal/prflt`** — config + gating. `ReadConfigFiles` reads every file in
-  `/etc/ripper/` (`rip.env`, `libr.env`) into the global `MasterConfig`, fills
+  `/etc/ripper/env/` (`rip.env`, `libr.env`) into the global `MasterConfig`, fills
   defaults, and produces two independent errors (rip side, librarian side).
   Those errors are stored in the global `MasterGate`. **Gating pattern:** each
   command checks `prflt.MasterGate.RipConfig` / `.LibrConfig` at the top of its
   `RunE` and returns it if non-nil — so a misconfigured librarian never blocks
-  ripping and vice versa. Config paths (`/etc/ripper`, `/usr/local/libexec`) are
-  hardcoded constants.
+  ripping and vice versa. Config paths (`/etc/ripper/env`, `/usr/local/libexec`)
+  are hardcoded constants.
 
 - **`internal/makemkv`** — the ported rip pipeline (the active migration target).
   `ParseInfo` turns `makemkvcon -r info` output into a `Disc` of `Track`s
   (parsing `CINFO`/`TINFO` lines by field number, cleaning the title, sorting by
   disc source order). The data path is complete: `Disc.setDests` resolves
   staging/permanent dirs, `Disc.Rip` auto-selects tracks (largest for a movie, an
-  anchor-band around the second-largest for a show; an explicit `SelTracks` list
-  overrides), drives per-track `makemkvcon mkv`, and `verify`s each MKV by magic
+  anchor-band around the second-largest for a show; an explicit id list via
+  `Disc.SelectTracks` overrides), drives per-track `makemkvcon mkv`, and `verify`s
+  each MKV by magic
   bytes + minimum size. Before each track it runs a **per-track staging capacity
   guard** — `sysstat.AvailBytes` vs `Track.Bytes * 11/10` (10% headroom) — and
   fails just that track if staging is short (per-track because `promote` drains
@@ -67,8 +71,7 @@ startup sequence before any command: `prflt.Init()` (load config) →
   rewrites `~/.MakeMKV/settings.conf`, `KeyExpired` spots the `MSG:5052/5055`
   expired-key codes in info output.
   **Not yet wired:** nothing invokes this path — `ripper rip` still execs
-  `media-ripper.sh` (see below). The `Mime` scan/allowlist is still a stub. See
-  `ROADMAP.md` for what remains.
+  `media-ripper.sh` (see below). See `ROADMAP.md` for what remains.
 
 - **`internal/sysstat`** — thin OS-stat helpers for the rip/UI layers. `AvailBytes`
   wraps `golang.org/x/sys/unix.Statfs` (`Bavail * Bsize`, returns bytes) for
@@ -82,9 +85,11 @@ startup sequence before any command: `prflt.Init()` (load config) →
   (idempotent). One table, `Runs`. Every CLI invocation opens the DB today; the
   daemon will become the single writer (see ROADMAP).
 
-- **`internal/web`** — `ripper serve` on `:9511`. Templates and static assets
-  (htmx, logo) are `go:embed`ded. The status page currently uses a `<meta refresh>`
-  full-page reload; SSE is roadmapped.
+- **`internal/web`** — `ripper serve` on `:9511`. Routes: `/` (status page),
+  `/json` (statuses as JSON), `/records` + `/records/{run_id}` (DB history),
+  `/logs/current/{drv}`. Templates and static assets (htmx, logo) are `go:embed`ded.
+  The status page currently uses a `<meta refresh>` full-page reload; `/json`
+  already exists as the fetch-poll interim for the roadmapped SSE swap.
 
 ### The bash↔Go seam (important)
 

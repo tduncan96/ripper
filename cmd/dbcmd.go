@@ -30,21 +30,20 @@ var createDbRecordCmd = &cobra.Command{
 		record := db.Record{
 			StartTime:   status.Start,
 			EndTime:     status.Updated,
-			ExitCode:    status.ExitCode,
+			ExitCode:    int64(status.ExitCode),
 			Device:      status.Device,
 			Title:       status.Title,
 			RawTitle:    status.RawTitle,
 			Destination: status.FullDest,
-			TotalRipMB:  status.TotalRipMB,
-			TotalMvMB:   status.TotalMvMB,
+			TotalRipMB:  int64(status.TotalRipMB),
+			TotalMvMB:   int64(status.TotalMvMB),
 			RipLog:      status.RipLog,
 		}
 
-		id, err := record.CreateRecord()
-		if err != nil {
+		if err := record.CreateRecord(); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Created run record. ID: %d\n", id); err != nil {
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Created run record. ID: %d\n", record.RunID); err != nil {
 			return err
 		}
 		return nil

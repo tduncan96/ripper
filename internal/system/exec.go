@@ -1,4 +1,4 @@
-package sysstat
+package system
 
 import (
 	"fmt"
@@ -19,4 +19,10 @@ func DriveState(dev string) error {
 	}
 
 	return nil
+}
+
+
+func Eject(dev string) error {
+	_, err := exec.Command("eject", dev).CombinedOutput()
+	return err
 }

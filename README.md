@@ -66,11 +66,13 @@ that's still what runs in production. The rip **data path** is now ported to Go
 subdir → verify the MKV → promote to the permanent library with a `sha256`
 integrity check on both sides (this replaces the bash `rsync`). The MakeMKV
 beta-key refresh and the udevadm drive-state probe are ported too. What's left is
-the surrounding logic — contention checks, the MIME/scan gate, ntfy notifications,
-and file locking — plus wiring the Go path into the CLI so it actually runs. The
-end goal is a long-lived daemon that owns rip state and pushes updates to the web
-UI over SSE. See [ROADMAP.md](ROADMAP.md) for the full checklist and the
-decisions behind it.
+a short list of close-out tasks — eject, exporting the rip log / disc-info files,
+recording the run on exit, ntfy notifications, and CLI track selection — plus
+wiring the Go path into the CLI so it actually runs. Contention checks, the
+MIME/scan gate, and file locking were dropped rather than ported (contention moves
+in-process under the daemon). The end goal is a long-lived daemon that owns rip
+state and pushes updates to the web UI over SSE. See [ROADMAP.md](ROADMAP.md) for
+the remaining tasks and the decisions behind them.
 
 ## Commands
 
@@ -87,7 +89,7 @@ The binary is a [Cobra](https://github.com/spf13/cobra) CLI:
 
 ## Configuration
 
-Config comes from env files in `/etc/ripper/` (loaded at startup by
+Config comes from env files in `/etc/ripper/env/` (loaded at startup by
 `internal/prflt`):
 
 - **`rip.env`** — `PERMANENT`, `STAGING`, `STATUS_TMP`, `LOG_TMP`, `NTFY_URL`,

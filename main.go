@@ -16,14 +16,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	database, err := db.Init(prflt.MasterConfig.RipConfig.RipDbPath)
+	database, err := db.Init()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "database initialization error: %s.\n Exiting ...", err)
 		os.Exit(1)
 	}
 	defer db.Close(database)
 
-	db.RipRecordDB = database
+	db.DB = database
 
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)

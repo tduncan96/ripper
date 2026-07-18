@@ -3,18 +3,105 @@
 Converting `scripts/media-ripper.sh` from a bash-orchestrated pipeline into Go,
 in two stages:
 
-1. **This pass — extract logic.** Move all computation / data-shaping out of bash
-   into native Go functions. Originally bash was to keep the two streaming commands
-   (`makemkvcon`, `rsync`); in practice the Go rip path went further — it drives
-   `makemkvcon` directly and replaced `rsync` with a verified in-Go copy. One-shot
-   external tools (`clamdscan`, `eject`, `udevadm`, `smart_check`) stay in bash for
-   now. The ported path is written but not yet wired into the CLI (see Integration).
-2. **Next — daemon.** A long-lived server owns state and runs a goroutine per rip.
+1. **Extract logic (essentially done).** All computation / data-shaping now lives
+   in native Go. The rip data path — `ParseInfo → Rip → verify → promote` — drives
+   `makemkvcon` directly and replaced `rsync` with a verified in-Go copy. Beta-key
+   refresh and the udevadm drive-state probe are Go-owned too. What's left is a
+   short list of close-out tasks (below) and then wiring it into the CLI.
+2. **Daemon (next).** A long-lived server owns state and runs a goroutine per rip.
    The CLI becomes a thin client that talks to the server over a unix socket. The
-   server drives `makemkvcon`/`rsync` via `exec`, holds status in memory, and
-   pushes to the web UI over SSE. Bash shrinks to nothing (or near it).
+   server drives `makemkvcon` via `exec`, holds status in memory, and pushes to the
+   web UI over SSE. Bash shrinks to nothing (or near it).
 
-## Target architecture (stage 2)
+---
+
+## Remaining stage-1 work (close-out tasks)
+
+Roughly in the order to tackle them. Bash line refs point at the behavior being
+ported.
+
+1. **Eject (do first).** Port `eject "$DEVICE"` on rip completion/failure. The tool
+   stays external; needs a Go caller plus the `-e` flag semantics. (bash 27–30,
+   780–784)
+
+2. **Log + info file export.** A small helper in `rip.go` that moves the accumulated
+   rip log (the `Rip` `out []byte`) and the disc-info dump to
+   `$PERM/$DEST/Logs/$RAW_TITLE.rip.log` and `$RAW_TITLE.info`. Uses `Disc.Raw`
+   (now correctly populated). This absorbs the old `INFO_DEST` save and the
+   `exit_handler` log export. (bash 45–64, 487–504)
+
+3. **Rip-exit orchestration + record.** Invoke `ripper record` on rip exit and
+   finalize status. Runtime calc (elapsed time) is TBD — decide whether it's worth a
+   helper. (bash 32–43)
+
+4. **ntfy notifications.** Replace the curl pings with `net/http` POSTs: request
+   received, ripping, completion/failure. (bash 24, 309, 610, 625)
+
+5. **CLI track selection.** Wire an explicit track-id list through the CLI into
+   `Disc.SelectTracks`, replacing the interactive `-t` prompt loop. (bash 510–546)
+
+6. **Integration / wiring (later).** Add command entry points (`parse-info`, a native
+   `rip`) and cut the bash seam over — or skip straight to the stage-2 daemon. Until
+   this lands, the Go rip path is unreferenced: `ripper rip` still execs
+   `media-ripper.sh`, and `KeyExpired`/`RefreshKey`/`DriveState` are written but
+   never called.
+
+### Explicitly not porting (acceptable gaps)
+
+- Preflight checks — block-device test, `ID_FS_TYPE` disc-readable check, the 3×
+  drive-detect retry loop (bash 316, 341–357). Whatever didn't come over is fine.
+- Episode-filename collision dedup (`_j` suffix, bash 737–743) — the Go
+  `offset + order` episode naming is more robust, so a collision guard isn't needed.
+- `clamdscan` (mime/virus scan) and `sudo smart_check.sh` — genuinely external,
+  stay in bash, not invoked from the Go path.
+
+### Dropped (were in the bash script; deliberately not ported)
+
+- MakeMKV index resolution (`DRV:` → `disc:N`) — the `dev:$DEVICE` source addresses
+  the device directly, deleting the whole section.
+- `mimeAllowed` + scan orchestration — no longer part of the pipeline.
+- flock file locking — contention is handled by in-process checks.
+- `reserved_by_others` / `sibling_in_starting` cross-process contention — becomes
+  the daemon's in-memory job map + mutex.
+- source-order mapping — per-track rip dirs make the id→file mapping exact.
+
+### Deferred to the daemon (do NOT convert now)
+
+`write_status` (bash 102–172) and the two live progress loops — `safe_du` polling
+during rip (631–635) and rsync `--info=progress2` parsing (863–871) — are coupled to
+the exec loop the daemon will own. Converting them now means bash shelling out to Go
+every second, thrown away once the daemon owns the exec. `on_signal` (70–83) becomes
+in-process context cancellation.
+
+---
+
+## Already ported (reference)
+
+| Concern | Bash | Go |
+|---|---|---|
+| TINFO/CINFO track parsing | 435–460 | `ParseInfo` (`parse.go`) |
+| title cleaning (strip SEASON/DISC, titlecase) | 409–411 | `ParseInfo` |
+| dest-path derivation (Movie / Show/Season N) | 415–427 | `Disc.setDests` |
+| track selection — movie largest / show anchor-band | 548–562, 697–705 | `Disc.Rip` |
+| episode offset numbering | 707–744 | `Disc.Rip` |
+| per-track `makemkvcon mkv` (sequential, per-track dirs) | 615–628 | `Make` + `Disc.Rip` |
+| `makemkvcon info` | 395 | `Info` (`dev:` source) |
+| capacity guard (per-track, 10% headroom) | 578–603 | `Disc.Rip` / `promote` |
+| `rsync` promote → in-Go copy + sha256 both sides | 863–871 | `promote` |
+| `staging_avail` (df) | 98–100 | `sysstat.AvailBytes` |
+| `drive_state` (udevadm) | 85–88 | `sysstat.DriveState` |
+| beta key fetch/apply/expired detect | 218–256 | `key.go` (`RefreshKey`/`KeyExpired`) |
+| batch-dir cleanup | 777 | `staging.RemoveAll` |
+
+**Behavior change, by design:** show ripping no longer produces an `Extras`/`.review`
+split. Bash ripped *all* show tracks then sorted small→`Extras`, oversize→`.review`.
+Go selects only the anchor band (0.7–1.3× the second-largest) *before* ripping, so
+out-of-band tracks are never ripped. This is the locked-in "select survivors
+upstream" decision — you lose the small bonus tracks entirely.
+
+---
+
+## Target architecture (stage 2 — daemon)
 
 - One daemon process; `map[driveTag]*Rip` of live jobs.
 - CLI `ripper rip 0 2` → `POST /rips` over unix socket → server validates
@@ -77,95 +164,6 @@ Worst case for a mid-rip restart: re-rip **one title** (~5–15 min), never the 
 Level 2 (survive-in-place: makemkvcon keeps ripping through a daemon restart, daemon
 re-attaches via pidfd + `KillMode=mixed`) is deferred — a later optimization only if
 re-ripping one title on restart proves annoying. Nothing in Level 1 blocks it.
-
----
-
-## Stage 1 checklist — extract logic to Go
-
-Rule of thumb: computation & data-shaping → native Go func. Only tools with no
-Go-native equivalent stay as external process calls.
-
-### Bucket A — pure logic → native Go (no external process)
-
-- [x] `ParseInfo` — track parsing → `internal/makemkv/parse.go`.
-- [x] title cleaning — folded into `ParseInfo` (strip SEASON/DISC, titlecase).
-- [x] dest-path derivation — `Disc.setDests` (Movie vs `Show/Season N`).
-- [x] track selection — anchor-band / largest in `Disc.Rip`; an explicit
-      `SelTracks` list overrides (the data-level `-t` hook).
-- [x] episode naming / rename — folded into `Disc.Rip` (offset scan +
-      per-track dirs). The old `PlanRename` / source-order mapping is deleted,
-      not ported — the per-track dirs made it moot.
-- [ ] `contention` over `[]Status` — `reserved_by_others` + `sibling_in_starting`
-      (174–216).
-- [~] `capacity` — **partially done, reshaped from the bash design.** Ported as a
-      per-track guard in `Disc.Rip` (not a whole-disc pre-check): before each track,
-      `sysstat.AvailBytes` vs `track.Bytes * 11/10` (10% headroom), fail the track if
-      short. `promote` runs the same 10%-headroom check against the *permanent*
-      filesystem before copying. Rationale: `promote` drains staging per track, so
-      peak staging use is ~one track, never the whole disc — the bash
-      `NEEDED = TOTAL_MB * 11/10`
-      whole-disc reservation was over-conservative. The "need" now comes from parsed
-      `Track.Bytes` (exact), not `du`/`TOTAL_MB` (which truncated per-title).
-      **Deliberately dropped, not deferred:** the `reserved_by_others` reservation
-      math — staging (~100 GB) vs max real track (~40 GB) means two concurrent rips
-      fit, so the cross-drive TOCTOU race is harmless; the daemon's in-memory state
-      closes it properly later anyway. **Skipped for now (may revisit):** the
-      `.review` eviction wait (578–603) — trialing whether staging drains on its own
-      given the tighter per-track footprint; without it, a space-short track just
-      fails instead of evicting.
-- [ ] index resolution — parse `DRV:` lines → device↔disc index (381–405).
-      **Decide first:** the `dev:$DEVICE` source may delete this section entirely
-      (see the simplification note at bash 516–524) before it's worth porting.
-- [ ] `mimeAllowed(mime string) bool` + scan orchestration — the `Mime` stub
-      (allowlist/quarantine logic; `clamdscan` itself stays external) (938–999).
-- [ ] runtime calc + log export helpers (exit_handler bits, 156–219).
-
-### Bucket B — external but replaceable → do natively in Go
-
-- [x] `staging_avail` (df) → `sysstat.AvailBytes` (`golang.org/x/sys/unix.Statfs`,
-      `Bavail * Bsize`, returns bytes). Lives in new `internal/sysstat`.
-- [ ] `safe_du` (du) → walk + sum. **Not needed by the rip path** — the capacity
-      guard uses `Statfs` (free space) + parsed `Track.Bytes` (need), never a
-      recursive dir size. Port only if the librarian (`STAGE_START_SIZE`, ~859) needs
-      it. Deferred, not dropped.
-- [x] makemkv beta key fetch (curl) → `net/http` + `regexp` — `internal/makemkv/key.go`.
-      `RefreshKey` scrapes the forum page and rewrites `app_Key` in
-      `~/.MakeMKV/settings.conf` (atomic tmp+rename); `KeyExpired` detects the
-      `MSG:5052/5055` expired-key codes in info output. Not yet wired into the CLI.
-- [ ] ntfy notifications (curl) → `net/http`
-- [ ] flock → Go file-lock now; in-daemon mutex later
-
-### Bucket C — genuinely external, stay as `exec` calls
-
-- Streaming: `makemkvcon` (info + per-track `mkv`) is now driven from Go
-  (`Info`/`Make`, called by `Disc.Rip`). **`rsync` is gone** — `promote` does the
-  staging→permanent copy in Go with a streaming sha256 integrity check on both
-  sides. This is ahead of the original "keep streaming in bash" plan; both are now
-  Go-owned execs/IO, ready for the daemon to drive directly.
-- `udevadm` drive-state probe is now driven from Go too — `sysstat.DriveState`
-  execs `udevadm info --query=property` and checks for `ID_CDROM_MEDIA=1`. The
-  tool stays external; only the orchestration moved.
-- One-shot, **leave in bash until the daemon lands:** `clamdscan`, `eject`,
-  `sudo smart_check.sh`.
-
-### Integration — not yet wired
-
-The rip data path exists in Go (`ParseInfo → Rip → verify → promote`), along with
-the beta-key refresh (`key.go`) and the udevadm drive-state probe
-(`sysstat.DriveState`), but nothing invokes any of it yet: `ripper rip` still
-`exec`s `media-ripper.sh`, and there's no `parse-info` command. **Next step to
-make the ported logic live:** add the command entry points and cut the bash seam
-over to them (or, given how much is Go-owned now,
-skip straight toward the stage-2 daemon rather than a bash-calls-Go interim).
-
-### Deferred to the daemon step (do NOT convert now)
-
-`write_status` (102–172) and the two live progress loops — `safe_du` polling
-during rip (631–635) and rsync `--info=progress2` parsing (863–871) — are coupled
-to the `makemkvcon`/`rsync` execs that stay in bash. Converting them now means bash
-shelling out to Go every second inside those loops, thrown away once the daemon
-owns the exec. **Seam: convert everything except the live progress of the two
-streaming commands.**
 
 ---
 

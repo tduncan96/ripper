@@ -16,7 +16,7 @@ import (
 	"strconv"
 
 	"ripper/internal/prflt"
-	"ripper/internal/sysstat"
+	"ripper/internal/system"
 )
 
 var (
@@ -73,7 +73,7 @@ func promote(staging, perm *os.Root, name string) (err error) {
 		}
 	}()
 
-	avail, err := sysstat.AvailBytes(prflt.MasterConfig.RipConfig.Permanent)
+	avail, err := system.AvailBytes(prflt.MasterConfig.RipConfig.Permanent)
 	if err != nil {
 		return err
 	}
@@ -178,16 +178,15 @@ func (d *Disc) SelectTracks(sel []int) {
 	}
 }
 
-func (d *Disc) Rip() (out []byte, err error) {
+func (d *Disc) Rip() (err error) {
 	var errs []error
-
 	if err := d.setDests(); err != nil {
-		return out, err
+		return err
 	}
 
 	staging, err := os.OpenRoot(d.Staging)
 	if err != nil {
-		return out, err
+		return err
 	}
 	defer func() {
 		if cErr := staging.Close(); cErr != nil {
@@ -197,7 +196,7 @@ func (d *Disc) Rip() (out []byte, err error) {
 
 	perm, err := os.OpenRoot(d.Perm)
 	if err != nil {
-		return out, err
+		return err
 	}
 	defer func() {
 		if cErr := perm.Close(); cErr != nil {
@@ -224,7 +223,7 @@ func (d *Disc) Rip() (out []byte, err error) {
 	if d.Media == "Show" {
 		stagingDirs, err := fs.ReadDir(staging.FS(), ".")
 		if err != nil {
-			return out, err
+			return err
 		}
 
 		for _, dir := range stagingDirs {
@@ -241,7 +240,7 @@ func (d *Disc) Rip() (out []byte, err error) {
 
 		permFiles, err := fs.ReadDir(perm.FS(), ".")
 		if err != nil {
-			return out, err
+			return err
 		}
 
 		for _, file := range permFiles {
@@ -265,7 +264,7 @@ func (d *Disc) Rip() (out []byte, err error) {
 		}
 
 		track.Status = true
-		avail, err := sysstat.AvailBytes(prflt.MasterConfig.RipConfig.Staging)
+		avail, err := system.AvailBytes(prflt.MasterConfig.RipConfig.Staging)
 		if err != nil {
 			errs = append(errs, err)
 			track.Status = false
@@ -288,8 +287,8 @@ func (d *Disc) Rip() (out []byte, err error) {
 		path := filepath.Join(staging.Name(), dir)
 		trackOut, err := Make(track.ID, d.Device, path)
 		divString := fmt.Sprintf("\n\n======== Track %d || Order %d ========\n", track.ID, track.Order)
-		out = append(out, []byte(divString)...)
-		out = append(out, trackOut...)
+		d.Log = append(d.Log, []byte(divString)...)
+		d.Log = append(d.Log, trackOut...)
 		if err != nil {
 			errs = append(errs, err)
 			track.Status = false
@@ -302,7 +301,7 @@ func (d *Disc) Rip() (out []byte, err error) {
 			continue
 		}
 		verify := fmt.Sprintf("file %s integrity verified", track.FileName)
-		out = append(out, []byte(verify)...)
+		d.Log = append(d.Log, []byte(verify)...)
 
 		newName := fmt.Sprintf("%s S%dE%d", d.Title, d.Season, offset+track.Order)
 		if err := staging.Rename(filepath.Join(dir, track.FileName), newName); err != nil {
@@ -312,7 +311,7 @@ func (d *Disc) Rip() (out []byte, err error) {
 		}
 		rename := fmt.Sprintf("file %s renamed to %s", track.FileName, newName)
 		track.FileName = newName
-		out = append(out, []byte(rename)...)
+		d.Log = append(d.Log, []byte(rename)...)
 
 		if err := promote(staging, perm, track.FileName); err != nil {
 			errs = append(errs, err)
@@ -320,7 +319,7 @@ func (d *Disc) Rip() (out []byte, err error) {
 			continue
 		}
 		promote := fmt.Sprintf("file %s successfully promoted to %s", track.FileName, d.Perm)
-		out = append(out, []byte(promote)...)
+		d.Log = append(d.Log, []byte(promote)...)
 	}
 
 	d.Status = true
@@ -336,5 +335,5 @@ func (d *Disc) Rip() (out []byte, err error) {
 		}
 	}
 
-	return out, errors.Join(errs...)
+	return errors.Join(errs...)
 }

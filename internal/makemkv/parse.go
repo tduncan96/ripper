@@ -49,9 +49,13 @@ type Disc struct {
 	Perm       string         `json:"perm"`
 	CherryP    bool           `json:"cherry_picked"`
 	Status     bool           `json:"status"`
+	Log        []byte         `json:"log"`
+	Info       []byte         `json:"info"`
 }
 
 func ParseInfo(b []byte) (disc Disc, err error) {
+	disc.Info = b
+	
 	var lines []string
 	scanner := bufio.NewScanner(bytes.NewReader(b))
 	for scanner.Scan() {
@@ -76,7 +80,7 @@ func ParseInfo(b []byte) (disc Disc, err error) {
 			title = "ERROR"
 			disc.Raw = title
 		} else {
-			disc.Raw = title
+			disc.Raw = titleLine[1]
 			title = discTitleRe.ReplaceAllString(titleLine[1], "")
 			title = spaceRe.ReplaceAllString(title, " ")
 			title = strings.TrimSpace(title)
